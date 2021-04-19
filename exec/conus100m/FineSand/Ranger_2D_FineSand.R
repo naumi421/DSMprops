@@ -9,7 +9,7 @@
 
 # Workspace setup
 # Install packages if not already installed
-required.packages <- c("raster", "sp", "rgdal", "ranger", "snow", "snowfall", "dplyr", "ggplot2","hexbin","doParallel","aqp","Hmisc","spatstat","maptools")
+required.packages <- c("raster", "sp", "rgdal", "ranger", "snow", "snowfall", "dplyr", "ggplot2","hexbin","doParallel","aqp","Hmisc","spatstat","maptools","DSMprops")
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
@@ -51,7 +51,9 @@ shp.pts <- shp.pts[polybound,]
 # plot(shp.pts, add=TRUE)
 
 ## Parallelized extract: (larger datasets)
-# rasterOptions(maxmemory = 4e+09)
+rasterOptions(maxmemory = 4e+09)
+pts.ext <- DSMprops::parPTextr(sp = shp.pts, gridlist = cov.grids, os = "linux")
+
 # cpus <- 50
 # cl <- makeCluster(cpus, type="FORK")
 # registerDoParallel(cl)
@@ -62,7 +64,7 @@ shp.pts <- shp.pts[polybound,]
 # ov.lst$DID <- seq.int(nrow(ov.lst))
 # shp.pts$DID <- seq.int(nrow(shp.pts))
 # pts.ext <- merge(as.data.frame(shp.pts),ov.lst, by="DID")
-# 
+#
 # ## Save points
 # saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_SSURGO_SG100_covarsc.rds",sep=""))
 ## Updated extract for CONUS
@@ -210,7 +212,7 @@ for(d in depths){
   formulaStringRF <- as.formula(paste('prop_t ~', paste(gsub(".tif","", cov.grids.names), collapse="+")))
   ## Determine 95% interquartile range for relative prediction interval
   varrange <- as.numeric(quantile(pts.extcc$prop, probs=c(0.975), na.rm=T)-quantile(pts.extcc$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
-  
+
   ############### Build quantile Random Forest
   #detach(package:doParallel)
   rf.qrf <- ranger(formulaStringRF, data=pts.extcc@data, num.trees = 100, quantreg = T, num.threads = 50, min.node.size = 1,case.weights = pts.extcc@data$tot_wts)
@@ -236,8 +238,8 @@ for(d in depths){
   saveRDS(rf_lm_adj, paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm_nasisSSURGO_SG100.rds",sep=""))
   rf.qrf <- readRDS(paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
   rf_lm_adj <- readRDS(paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm_nasisSSURGO_SG100.rds",sep=""))
-  
-  
+
+
   ############ Cross Validate and examine metrics among Lab and Nasis pedons ##########
   ################### Manual Cross validation ################################
   pts.extcvm <- pts.extcc@data
@@ -275,7 +277,7 @@ for(d in depths){
   stopCluster(cl)
   pts.extpcv <- plyr::rbind.fill(pts.extpcv.lst)
   pts.extpcv$pcvpred <- as.numeric(pts.extpcv$pcvpred)
-  
+
   ## Validation metrics
   ## PCV statistics: all data
   cvp.RMSE = sqrt(mean((pts.extpcv$prop_t - pts.extpcv$pcvpred)^2, na.rm=TRUE))
@@ -354,17 +356,17 @@ for(d in depths){
   ggsave(paste(predfolder,'/ValPlot_1to1_scd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.SCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
   ## Save Cross validation graph and data for future plotting
   saveRDS(pts.extpcv, paste(predfolder,"/cvlm_preds_2D_",prop, "_", d, "_cm_nasisSSURGO_SG100.rds", sep=""))
-  
-  
+
+
   ##### Reference covar rasters to use in prediction
   rasters <- stack(cov.grids)
   #names(rasters)
-  
+
   ## Ranger Predict
   predfun <- function(model, ...) predict(model, ...)$predictions
   # pred <- predict(rasters, rf.qrf, fun=predfun, type="response", progress="text", num.threads = 50)
-  
-  
+
+
   ## Predict onto covariate grid
   ## Parallelized predict
   rasterOptions(maxmemory = 5e+09,chunksize = 8e+08)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
@@ -424,33 +426,33 @@ for(d in depths){
     if(trans=="log10"){
       smrest <- mean(10^(pts.extcc@data$prop_t - pts.extcc@data$trainpredsadj))
       bt.fnlm <- function(x) { # Duans smearing est
-      ind <-  ((10^(x))-0.1)*smrest 
+      ind <-  ((10^(x))-0.1)*smrest
       return(ind)
       }
       bt.fn <- function(x) {
-        ind <-  (10^(x))-0.1 
+        ind <-  (10^(x))-0.1
         return(ind)
       }
     }
     if(trans=="log"){
       smrest <- mean(exp(pts.extcc@data$prop_t - pts.extcc@data$trainpredsadj))
       bt.fnlm <- function(x) { # Duans smearing est
-      ind <-  ((exp(x))-1)*smrest 
+      ind <-  ((exp(x))-1)*smrest
       return(ind)
       }
       bt.fn <- function(x) {
-        ind <-  (exp(x))-1 
+        ind <-  (exp(x))-1
         return(ind)
       }
       }
     if(trans=="sqrt"){
       smrest <- mean((pts.extcc@data$prop_t - pts.extcc@data$trainpredsadj)^2)
       bt.fnlm <- function(x) { # Duans smearing est
-      ind <-  (x^2)*smrest 
+      ind <-  (x^2)*smrest
       return(ind)
       }
       bt.fn <- function(x) {
-        ind <-  x^2 
+        ind <-  x^2
         return(ind)
       }
       }
