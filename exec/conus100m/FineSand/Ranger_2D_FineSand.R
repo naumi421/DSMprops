@@ -15,18 +15,19 @@ if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
 rm(required.packages, new.packages)
 ## Increase actuve memory useable by raster package: Windows only
-memory.limit(500000)
+#memory.limit(500000)
 rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 
 ## Key Folder Locations
 predfolder <- "/push/FineSand_test_nasis_ranger"
 covfolder <- "/push/SG100_covars"
-ptsfolder <- "/push/NASIS20SSURGO20extv2"
+ptsfolder <- "/push/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
 
 ######## Load soil profile collection ##############
 pts <- readRDS(paste(ptsfolder,"/NASIS_all_component_horizon_match_SPC_ssurgo20.rds",sep=""))
 pts.proj <- proj4string(pts)
-coordinates(pts) <- ~ x + y
+shp.pts <- pts@site
+coordinates(shp.pts) <- ~ x_std + y_std
 shp.pts <- as(pts,'SpatialPointsDataFrame')
 projection(shp.pts) <- pts.proj
 shp.pts@data <- shp.pts@data[,c("peiid","mtchtype","compname")]
@@ -37,7 +38,7 @@ shp.pts@data <- shp.pts@data[,c("peiid","mtchtype","compname")]
 cov.grids <- list.files(path = covfolder,pattern=".tif$",full.names = T, recursive = F)
 cov.grids.names <- basename(cov.grids)
 ## If points need to be matched up to grids ###
-projgrid = raster(cov.grids[1])
+projgrid <- raster(cov.grids[1])
 cov.proj <- projection(projgrid)
 shp.pts <- spTransform(shp.pts, CRS(cov.proj)) # project to match rasters
 
