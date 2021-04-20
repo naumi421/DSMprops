@@ -1,0 +1,267 @@
+---
+title: "Forest Service NRM pedon data"
+author: "Colby Brungard, Assistant Professor, Dept. of Plant and Environmental Sciences, New Mexico State University, cbrung@nmsu.edu"
+output: html_notebook
+---
+
+Cleaning of the Forest Service NRM Inventory and Mapping database. 
+
+Data Provenance: 
+This data was sent to me by Suzann Kienast-Brown who got it from:
+Kyle Stephens
+Soil Data Quality Specialist
+Phone: 503-414-3289
+E-mail: kyle.stephens@or.usda.gov
+Regional Office Staff - Portland, OR
+USDA-Natural Resources Conservation Service
+1201 NE Lloyd Blvd., Suite 900
+Portland, OR 97232
+FAX: 855-651-9082
+
+Kyle in turn got this data from Martin Ferwerda <Ferwerda, Martin -FS <mferwerda@fs.fed.us>
+
+  Pullled from https://github.com/ColbyBrungard/Continuous-Soil-Properties/blob/master/FS_NRM_pedonDataCleaning.Rmd 4/20/2021 to centralize code for NCSS DSM Focus Team.
+
+
+Load required libraries
+```{r libraries}
+library(sf)
+library(dplyr)
+library(tidyverse)
+```
+
+
+1. Spatial coordinates
+```{r}
+# For reasons still unknown I was unable to get the 'right' coordinates from the database files so Martin Ferwerda <Ferwerda, Martin -FS <mferwerda@fs.fed.us> sent me a shapefile with the coordinates and Sample IDs. This is the SAMPLE_PT_ESRI shapefile. The correct projection is EPSG 3857. However; site ids: 1137, 1152, 1154, 1179, 905, 67, 117.1-O2-29-897-61 & 592.1-S3-25-797-101 had nonsensical coordinates (1.00000000) and the shapefile wouldn't open in R. I deleted these records by editing in QGIS, selecting, and deleting, then re-saved as SAMPLE_PT_ESRI.shp. 
+loc <- st_read("D:/Data/Forest Service Pedon data/SAMPLE_PT_ESRI_SHP.shp")
+dim(loc)
+# A. Legacy pedon data without location info were located on top of Forest Service (FS) buildings when this data was created. Since this is non-sensical these points need to be removed. I tried filtering points by all those that fell inside national forest boundaries, but this excluded ~ 10K observations, many of which were obviously valid pedons, but happened to fall just outisde of the actual boundaries.
+# A1. Remove duplicates. This removes all of the duplicates, but keeps one point at the FS buildings which need to be removed.
+loc2 <- distinct(loc, .keep_all = TRUE)
+# st_write(loc2, "./loc2.shp") # This was later deleted as an unnecessary intermediate step. 
+# A2. Identify and remove all remaining points that still have invalid locations. 
+# These were difficult to identify because many of the points were in small municipaliities that were hard to clearly identify. This was accomplished using a spatial query to select all points from loc2.shp that were within popluated areas. Popluated areas were identifed using USA_Census_Populated_Places.shp which is a shapefile of populated places that was obtained from: https://hub.arcgis.com/datasets/esri::usa-census-populated-places. "U.S. Populated Place Areas represents populated place areas that include census designated places, cities, and incorporated places in the United States identified by the U.S. Census Bureau."https://www.arcgis.com/home/item.html?id=4e75a4f7daaa4dfa8b9399ea74641895
+# A3 Selected locations within populated areas were exported to a shapefile and manually reviewed as poplulated areas include some sparsely populated areas, ski resorts, etc. Each point that did not fall in a popluated area was removed from this file leaving me with a shapefile of only locations that are not valid. The SITE_ID column was copied from this shapefile which resulted in the following list of pedons with invalid locations. This shapefile was not kept. 
+bad_SITE_ID <- c("1-28", "1189-102-F29-1", "00-0502", "90-104", "0515110-M", "78UT650_BVF_LS1_13", "76UT650_SPR_MF1_26", "76UT650_SFP_SC5_12", "76UT650_SFP_SC4_11", "76UT650_BVF_SC6_8", "76UT650_BVF_LS1_10", "75UT650_SPR_SSH4_20", "75UT650_SPR_FM5_11", "75UT650_SPR_FM4_23", "75UT650_SPR_FM1_22", "75UT650_SFP_MF3_2_a", "75UT650_BVF_TM6_4", "75UT650_BVF_TM19_6", "75UT650_BVF_SC9_5", "75UT650_BVF_SC2_11", "75UT650_BVF_S17_9", "75UT650_BVF_S17_7", "75UT650_BVF_S14_12", "669", "607", "96-KV-102", "92-TC-068", "06-12-80-1", "4-13-5(2)", "7A/74", "BLDT01", "01-76-03G", "275.1-T1S1-29-696-128", "10-477-59: P1", "36.7(706)-S3-20-491-125", "10-584-100: P3", "-484-190: P1", "1 (WET SPOT)", "881-117-2", "781-167-N4", "781-167-N3", "781-167-N2", "1078-171-T1", "396", "1474-023-1JR", "000-1032", "184-66-RM", "NE009-009AB-7", "LP-1", "00100N", "FS0108078701023", "FS011604915E003", "FS0155029472012", "FS0112039281080", "FS0112039281079", "FS01080475TE073", "FS01080204DB031", "720", "FS01030192MR039", "FS01020195VK003", "FS01020780DS021", "FS0105019361012")
+# A4 Remove invalid site id's. 
+loc3 <- loc2[!loc2$SITE_ID %in% bad_SITE_ID,]
+# A5 I just realized I had forgotten to remove all of the pedons that were in AK. Remove these with a filter based on latitude < 49 degrees
+loc4 <- filter(loc3, LAT_DD < 49)
+dim(loc4) # 49698
+```
+
+I AM HERE. 
+2. Site level attributes
+Site data in the underlying data included: Geology (not sure of source, maybe observed, maybe extracted from geology maps), 
+
+```{r}
+```
+
+
+
+
+3. Horizon level attributes
+```{r}
+ #Join coordinates and depth info.
+  fs.ls = merge(fs.l, F4, by='SITE_ID', duplicateGeoms = TRUE)
+ # Check for pairs with duplicated spatial coordinates
+  dim(fs.ls) #70394
+  fs.ls2 <- remove.duplicates(fs.ls)
+   dim(fs.ls2) #54242 (removed about 20K records)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+2. Total soil dpeth and depth classes. 
+Depth Class | Standard | Metric
+----------- | -------- | ------
+Very Shallow | (0-10") | (0-25.4 cm)
+Shallow | (10-20") | (25.4-50.8 cm)
+Moderately Deep | (20-40") | (50.8-101.6 cm)
+Deep | (40-60") | (101.6 - 152.4 cm)
+Very Deep | (> 60") | (>152.4 cm)
+
+Caveat one: Recorded depth values are converted from inches to cm so all values = 152.4 are actually 60 inches, and should probably not be used since this is probably just the depth of excavation. Values of 381 (or similar) seem to be a place holder and don't make much sense. To use the actual depth values I need to compare recorded values against depth classes and remove those that are outside the range of the depth classes since I trust the depth classes more. 
+
+Caveat two: I feel that there is some ambivalence between deep and very deep classes. Hopefully this will be answered soon.
+
+Caveat three: I don't really need to do all this complicate data processing. I should have only selected those with valid location data first!
+
+
+
+```{r Depth Classes and total depth}
+# 4.1 All pedons with some form of root restricting layer in the horizon table.  
+# Horizon level data
+fh <- read.csv("D:/Data/Forest Service Pedon data/PEDON_HORIZON.csv")
+fh1 <- fh[,c(4,12:14)]
+# My assumptions are that R, Cr, d, m, and x are root restricting horizons
+# If multiple horizons in a profile have a hzn designation indicting a root restricting layer e.g., Cr1, Cr2, R; Crk, Cr1, Cr2: Bkm1, Bkm2; then the top depth is the root limiting layer. 
+#If the R horizon has some depth (e.g., 41-45 cm) then I took the top depth because this situation only likely happened if the bedrock was fractured. This might not be the exact root restricting depth as roots could get into cracks , but the justification for a lower depth is more uncertain (and it is easier to code to choose the top depth). 
+# Filter for m,r,d,x master and suffix horizon designations. One does have to be a bit careful with this because this does catch other horizons.
+fr <- fh1[grep('[mrdx]', fh1$HORIZON_DESIGNATION, ignore.case=TRUE),] 
+fr$HORIZON_DESIGNATION <- as.character(fr$HORIZON_DESIGNATION) #Force to be a character vector to use the startsWith().
+#There are a lot of crazy horizon designations #table(test$HORIZON_DESIGNATION). Remove those that don't start with R or Cr and that are >=5 characters (this gets rid of things like 'O needles and leaves'). 
+fr2 <- subset(fr, startsWith(fr$HORIZON_DESIGNATION, 'R') | 
+                  startsWith(fr$HORIZON_DESIGNATION, 'Cr') |
+                  !nchar(HORIZON_DESIGNATION) >= 5, ignore.case=TRUE)
+# Remove odd horizon designations that dont make sense or aren't root restricting. I've decided to leave in most combination horizons such as Cr/Bt, but these could be argued as not really root restricting. 
+fr3 <- fr2[!(fr2$HORIZON_DESIGNATION== '?Ar' | 
+               fr2$HORIZON_DESIGNATION== '?Bm' | 
+               fr2$HORIZON_DESIGNATION== '?Cm' | 
+               fr2$HORIZON_DESIGNATION== 'B2ir' |
+               fr2$HORIZON_DESIGNATION== 'B2IR' |
+               fr2$HORIZON_DESIGNATION== 'Bhir' |
+               fr2$HORIZON_DESIGNATION== 'Bir' | 
+               fr2$HORIZON_DESIGNATION== 'BIR' | 
+               fr2$HORIZON_DESIGNATION== 'DC' | 
+               fr2$HORIZON_DESIGNATION== 'duff' | 
+               fr2$HORIZON_DESIGNATION== 'Duff' | 
+               fr2$HORIZON_DESIGNATION== 'Lm' | 
+               fr2$HORIZON_DESIGNATION== 'M' |  
+               fr2$HORIZON_DESIGNATION== 'M175' | 
+               fr2$HORIZON_DESIGNATION== 'Min' | 
+               fr2$HORIZON_DESIGNATION== 'MIN' | 
+               fr2$HORIZON_DESIGNATION== 'ORG' | 
+               fr2$HORIZON_DESIGNATION== 'ORG.' |
+               fr2$HORIZON_DESIGNATION== 'R?' | 
+               fr2$HORIZON_DESIGNATION== 'R180' |
+               fr2$HORIZON_DESIGNATION== 'R63' | 
+               fr2$HORIZON_DESIGNATION== 'RT/Bt' | 
+               fr2$HORIZON_DESIGNATION== 'Rt?' | 
+               fr2$HORIZON_DESIGNATION== 'Rw' |
+               fr2$HORIZON_DESIGNATION== 'X' | 
+               fr2$HORIZON_DESIGNATION== 'ZR'),]
+ 
+# Only the first row of each pedon (i.e., the upper boundary of the first horizon indicating a root restricting layer)    
+fr4 <- fr3[!duplicated(fr3$SITE_ID),]
+# Assign depth 
+fr4$Depth = fr4$DEPTH_TOP_SOIL_HORIZON_CM
+# Assign a depth class based on NRCS defined soil depths 
+fr4$DepthClass <- ifelse(fr4$DEPTH_TOP_SOIL_HORIZON_CM <=25, 'VS',
+                   ifelse(fr4$DEPTH_TOP_SOIL_HORIZON_CM >25 & fr4$DEPTH_TOP_SOIL_HORIZON_CM <= 50, 'S',
+                    ifelse(fr4$DEPTH_TOP_SOIL_HORIZON_CM >50 & fr4$DEPTH_TOP_SOIL_HORIZON_CM <= 100, 'MD',
+                     ifelse(fr4$DEPTH_TOP_SOIL_HORIZON_CM >100 & fr4$DEPTH_TOP_SOIL_HORIZON_CM <= 150, 'D', 'VD'))))
+  
+# 4.2 Pedons with some depth data in the site table
+fs = read.csv("D:/Data/Forest Service Pedon data/PEDON.csv")
+# Remove all pedons with depth class data determined from the horizon table from the depth class dataset.
+fs2 <- subset(fs[,c(4,13,28,30,53,54)], !(fs$SITE_ID %in% fr4$SITE_ID))
+# The Pedon table did have depth to restriction and depth classes for some pedons, but it wasn't consistent. Filter and clean: 
+# 3.2.1 Idenfity depth to restrictive horizon in pedons that DO NOT have PEDON_DEPTH_CLASS recorded. Then assign depths based on relevant fields and create depth classes using the forest service breaks. 
+ # 1st Those without a pedon depth class & without a restriction_kind & without a restriction_depth_cm, & with DEPTH_CONTINUES == 'N' (very few of these): observed depth is treated as root restricting horizon
+ # 2nd Those without a pedon depth class & with a restriction_kind & without restriction_depth_cm: observed depth is treated as root restricting horizon 
+ # 3rd Those without a pedon depth class & with a restriction_kind & with restriction_depth_cm: restriction depth is treated as root restricting horizon
+# Relevant restriction_kind classes
+rkind <- c('CALC', 'DENS','FPAN','LITH','PARA')
+d1 = filter(fs2, PEDON_DEPTH_CLASS=='' & RESTRICTION_KIND=='' & DEPTH_OBSERVED_CM!='' & DEPTH_CONTINUES == 'N') 
+ d1$Depth = d1$DEPTH_OBSERVED_CM
+  d1$DepthClass <- ifelse(d1$Depth <=25.4, 'VS',
+                   ifelse(d1$Depth >25.4 & d1$Depth <= 50.8, 'S',
+                    ifelse(d1$Depth >50.8 & d1$Depth <= 101.6, 'MD',
+                     ifelse(d1$Depth >101.6 & d1$Depth <= 152.4, 'D', 'VD'))))
+d2 = filter(fs2, PEDON_DEPTH_CLASS=='' & (RESTRICTION_KIND %in% rkind) & is.na(RESTRICTION_DEPTH_CM))
+ d2$Depth = d2$DEPTH_OBSERVED_CM
+  d2$DepthClass <- ifelse(d2$Depth <=25.4, 'VS',
+                   ifelse(d2$Depth >25.4 & d2$Depth <= 50.8, 'S',
+                    ifelse(d2$Depth >50.8 & d2$Depth <= 101.6, 'MD',
+                     ifelse(d2$Depth >101.6 & d2$Depth <= 152.4, 'D', 'VD'))))
+d3 = filter(fs2, PEDON_DEPTH_CLASS=='' & (RESTRICTION_KIND %in% rkind) & !is.na(RESTRICTION_DEPTH_CM))
+ d3$Depth = d3$RESTRICTION_DEPTH_CM
+  d3$DepthClass <- ifelse(d3$Depth <=25.4, 'VS',
+                   ifelse(d3$Depth >25.4 & d3$Depth <= 50.8, 'S',
+                    ifelse(d3$Depth >50.8 & d3$Depth <= 101.6, 'MD',
+                     ifelse(d3$Depth >101.6 & d3$Depth <= 152.4, 'D', 'VD'))))
+# Join datasets and subset for only relevant columns  
+d4 <- rbind(d1,d2,d3)[,c(1,7,8)] 
+  
+# Filter combined data for NA's (a few crept in, this is the easiest way to remove these) and all depth values > 200 cm, which I believe to be incorrect.
+d4$Depth[d4$Depth>200] <- NA
+d5 <- d4[complete.cases(d4),]
+# 4.2.2 Idenfity depth to restrictive horizon in pedons that DO have PEDON_DEPTH_CLASS recorded.
+fs3 <- subset(fs2, !(fs2$SITE_ID %in% d5$SITE_ID))
+fs31 <- fs3[!fs3$PEDON_DEPTH_CLASS == "", ]
+# There was a fair amount of ambiquity in the PEDON_DEPTH_CLASS because there used to not be a very deep class (so deep was basically anything > 1 m including very deep soils). Also a number of the depth classes did not match the recorded depths so I needed to filter these. I believe that those without restriction depths/kinds to be interpretations.
+# 4.2.2.1, select all those WITH explicit restriction depths (this pretty much ignores the assigned depth class, which mostly matches but not always). This assumes that any observations that are noted as 152.4 cm (60 inches) are actually very deep soils. 
+fs32 <- filter(fs31, !is.na(RESTRICTION_DEPTH_CM))
+ fs32$Depth = fs32$RESTRICTION_DEPTH_CM
+  fs32$DepthClass <- ifelse(fs32$Depth <=25.4, 'VS',
+                   ifelse(fs32$Depth >25.4 & fs32$Depth <= 50.8, 'S',
+                    ifelse(fs32$Depth >50.8 & fs32$Depth <= 101.6, 'MD',
+                     ifelse(fs32$Depth >101.6 & fs32$Depth < 152.4, 'D', 'VD'))))
+    # Set depth values >= 152.4 to 150 (which is essentially a flag indicating 150+ cm and should be useful for survival analysis). This does through out a handful of values which are probably actual depth to bedrock values it also gets rid of a large nubmer of values that are probably not realy values. 
+    fs32$Depth <- ifelse(fs32$Depth >=152.4, 150, fs32$Depth)
+# 4.2.2.2, select all those WITHOUT explicit restriction depths, but with observed depth noted as NOT continuing. Since these are noted as not continuing I'm leaving the actual depth values for now. 
+fs33 <- filter(fs31, is.na(RESTRICTION_DEPTH_CM))
+ fs331 <- filter(fs33, DEPTH_CONTINUES == 'N')
+  fs331$Depth = fs331$DEPTH_OBSERVED_CM
+   # Remove all those with depths > 200 cm as I believe them to be bogus. I chose 200 to catch a few that might be real.
+   fs331.1 <- subset(fs331, Depth < 200)
+    fs331.1$DepthClass <- ifelse(fs331.1$Depth <=25.4, 'VS',
+                   ifelse(fs331.1$Depth >25.4 & fs331.1$Depth <= 50.8, 'S',
+                    ifelse(fs331.1$Depth >50.8 & fs331.1$Depth <= 101.6, 'MD',
+                     ifelse(fs331.1$Depth >101.6 & fs331.1$Depth < 152.4, 'D', 'VD'))))
+ 
+# 4.2.2.3, select those Pedons WITHOUT observed depth noted as NOT continuing. There is no longer any information to use to assign depths or to double check the depth classes so I accept the classes as they are but do not assign depths.  
+  fs332 <- filter(fs33, DEPTH_CONTINUES != 'N')
+   fs332$Depth <- rep(NA, nrow(fs332))
+    fs332$DepthClass <- fs332$PEDON_DEPTH_CLASS
+    
+    
+#  Concatenate data from 3.1 and 3.2
+FSD <- rbind(fr4[,c(1,5,6)], d5, fs32[,c(1,7,8)], fs331.1[,c(1,7,8)], fs332[,c(1,7,8)])
+# 4.3 Now go back to the horizon table and remove all pedons with root restricting layers identified in steps 3.1 or 3.2
+fh2 <- subset(fh1, !(fh1$SITE_ID %in% FSD$SITE_ID))
+# Get the max recorded depth of pedons without a recorded root restricting layer
+fh2.1 <- ddply(fh2, "SITE_ID", function(x) max(x$DEPTH_BOTTOM_SOIL_HORIZON_CM))
+names(fh2.1)[2] <- 'Depth'
+# Assume that all pedons > 145 cm are very deep and that all pedons < 145 cm were not excavated deeper for an unknown reason so I can't really determine their depth/depth class. I chose 145 cm instead of 150 cm because I was willing to accept the (I feel) low probability that there is a root restricting layer between 145 and 150 cm (which would change my depth class).  
+ fh2.1$DepthClass <- ifelse(fh2.1$Depth >= 145, 'VD', NA)          
+# Remove the pedons for which I couldn't determine a depth class, then set the remaining depth values to 150 (which is essentially a flag indicating 150+ cm and should be useful for survival analysis) because these depths (even if > 150 cm) only record the lower depth to which the pedon was excavated and are not physically meaningful. 
+ fh4 <- fh2.1[complete.cases(fh2.1),]
+ fh4$Depth <- 150 
+ 
+# Concatenate data this data with the existing depth data
+F4 <- rbind(FSD, fh4)
+ 
+# 4.4 Location info
+ # For reasons still unknown I was unable to get the 'right' coordinates from this data so Martin Ferwerda <Ferwerda, Martin -FS <mferwerda@fs.fed.us> sent me a shapefile with the coordinates and Sample IDs. This is the SAMPLE_PT_ESRI shapefiles. The correct projection is EPSG 3857. However; site ids: 1137, 1152, 1154, 1179, 905, 67, 117.1-O2-29-897-61 & 592.1-S3-25-797-101 had nonsensical coordinates (1.00000000) and the shapefile wouldn't open in R. I deleted these records by editing in QGIS, selecting, and deleting, then re-saved as SAMPLE_PT_ESRI.shp. 
+ fs.l = readOGR("D:/Data/Forest Service Pedon data", "SAMPLE_PT_ESRI_SHP")
+#Join coordinates and depth info.
+  fs.ls = merge(fs.l, F4, by='SITE_ID', duplicateGeoms = TRUE)
+ # Check for pairs with duplicated spatial coordinates
+  dim(fs.ls) #70394
+  fs.ls2 <- remove.duplicates(fs.ls)
+   dim(fs.ls2) #54242 (removed about 20K records)
+ 
+#Select only data within UCRB
+ # Read in UCRB basin and reproject to match pedon projection
+ UCRBbound <- readOGR(dsn="D:/UCRB/Boundaries", layer = "CO_River_watershed_Meade_wgs84")
+ UCRBbound2 <- spTransform(UCRBbound, CRS("+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs"))
+ # ID which observations are within the UCRB and subset
+ fs.ls2$inUCRB <- !is.na(over(fs.ls2, as(UCRBbound2, "SpatialPolygons")))
+ fs.UCRB <- fs.ls2[fs.ls2$inUCRB == 'TRUE',]
+ dim(fs.UCRB) # 5189
+#Choose only those that are within National forests because sometimes that data was put on top of the field office if no GPS point was recorded.  
+ fsAdmin <- readOGR("D:/Cascades DSM/Boundaries", layer = "S_USA.AdministrativeForest")
+ fsAdmin2 <- spTransform(fsAdmin, CRS("+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs"))
+ 
+ fs.UCRB$inFS <- !is.na(over(fs.UCRB, as(fsAdmin2, "SpatialPolygons")))
+ fs.Admin <- fs.UCRB[fs.UCRB$inFS == 'TRUE',]
+ dim(fs.Admin) #5159
+ 
+ 
+# Does everything look okay? Yes
+  #plot(UCRBbound2)
+  #points(fs.Admin, col='blue')
+```
