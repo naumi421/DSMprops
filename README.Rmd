@@ -2,6 +2,8 @@
 output: github_document
 ---
 
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
@@ -23,29 +25,27 @@ A hybrid repository including an R package for commonly used functions and proje
 You can install the released version of DSMprops from GitHub for R functions with:
 
 ``` r
-# install.packages("devtools")
-devtools::install_github("naumi421/DSMprops")
+install.packages("remotes")
+remotes::install_github("naumi421/DSMprops")
 ```
 
-Note that [Rtools](https://cran.r-project.org/bin/windows/Rtools/) (windows) or other pre-requisites (e.g. [Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-install-r-packages-using-devtools-on-ubuntu-18-04)) are necessary for installing devtools. 
+To get both R package functionality and access to all exec workflows, you can clone this repository locally and then build R package to have access to both package function calls and workflows. Note that [Rtools](https://cran.r-project.org/bin/windows/Rtools/) (windows) or other pre-requisites (e.g. [Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-install-r-packages-using-devtools-on-ubuntu-18-04)) are necessary for installing devtools. Although you can just clone the repository to get all the code and be able to build the package, devtools is needed to contribute to project.
 
-To get both R package functionality and access to all exec workflows, you can clone this repository locally and then build R package to have access to both package function calls and workflows.
-
-In bash:
+Cloning in bash:
 ```bash
 $ cd /path/where/repo/goes
-$ git clone naumi421/DSMprops.git
+$ git clone https://github.com/naumi421/DSMprops.git
 ```
 
 Rstudio also has options for cloning a repo with good guidance available at https://happygitwithr.com/.
 
-Once repository has been cloned. Open the R project in Rstudio and use *Build > Install and Restart* to install DSMprops package which can then be used in other sessions outside of the project..
+Once repository has been cloned. Open the R project in Rstudio and use *Build > Install and Restart* to install DSMprops package which can then be used in other sessions outside of the project.
 
 # DSMprops project overview: 
 
 The aim is to provide code guidance for all steps of Unites States National Cooperative Soil Survey digital soil mapping workflows. We break these out by certain tasks needed to acheive the mapping.
 
-## The properties we want to map
+## The properties we plan to map
 
 Property     | Units         | Notes
 ------------ | ------------- | -------------
@@ -67,7 +67,7 @@ electrical conductivity | (dS/m) |
 
 
 # Semi-detailed Structure of Project. 
-
+<!-- create url links to each part when repo location is finalized -->
 ## A. Pedon dataset cleaning and prep [per property?]
 ### A.1 Forest Service NRM data [Colby]
 ### A.2 NASIS point data
