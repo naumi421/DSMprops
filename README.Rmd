@@ -29,7 +29,7 @@ install.packages("remotes")
 remotes::install_github("naumi421/DSMprops")
 ```
 
-To get both R package functionality and access to all exec workflows, you can clone this repository locally and then build R package to have access to both package function calls and workflows. Note that [Rtools](https://cran.r-project.org/bin/windows/Rtools/) (windows) or other pre-requisites (e.g. [Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-install-r-packages-using-devtools-on-ubuntu-18-04)) are necessary for installing devtools. Although you can just clone the repository to get all the code and be able to build the package, devtools is needed to contribute to project.
+To get both R package functionality and access to all exec workflows, you can clone this repository locally and then build R package. Although you can just clone the repository to get all the code and be able to build the package, devtools is needed to contribute to the repository. Note that [Rtools](https://cran.r-project.org/bin/windows/Rtools/) (windows) or other pre-requisites (e.g. [Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-install-r-packages-using-devtools-on-ubuntu-18-04)) are necessary for installing devtools.
 
 Cloning in bash:
 ```bash
