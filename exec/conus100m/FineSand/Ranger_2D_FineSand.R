@@ -9,7 +9,7 @@
 
 # Workspace setup
 # Install packages if not already installed
-required.packages <- c("raster", "sp", "rgdal", "ranger", "snow", "snowfall", "dplyr", "ggplot2","hexbin","doParallel","aqp","Hmisc","spatstat","maptools","DSMprops")
+required.packages <- c("raster", "sp", "rgdal", "ranger", "snow", "snowfall", "dplyr", "ggplot2","hexbin","doParallel","aqp","Hmisc","spatstat","maptools","DSMprops","RSQLite")
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
@@ -19,7 +19,8 @@ rm(required.packages, new.packages)
 rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 
 ## Key Folder Locations
-predfolder <- "/push/FineSand_test_nasis_ranger"
+predfolder <- "/push/HYBconus100m/FineSand"
+repofolder <- "/push/repos/DSMprops/exec/conus100m/FineSand"
 covfolder <- "/push/SG100_covars"
 ptsfolder <- "/push/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
 
@@ -38,7 +39,7 @@ shp.pts@data <- shp.pts@data[,c("peiid","mtchtype","compname")]
 cov.grids <- list.files(path = covfolder,pattern=".tif$",full.names = T, recursive = F)
 cov.grids.names <- basename(cov.grids)
 ## If points need to be matched up to grids ###
-projgrid <- raster(cov.grids[1])
+projgrid <- raster(paste(covfolder,"/T07PRI5.tif",sep="")) # This raster is fully clipped
 cov.proj <- projection(projgrid)
 shp.pts <- spTransform(shp.pts, CRS(cov.proj)) # project to match rasters
 
@@ -53,25 +54,15 @@ shp.pts <- shp.pts[polybound,]
 
 ## Parallelized extract: (larger datasets)
 rasterOptions(maxmemory = 4e+09)
-pts.ext <- DSMprops::parPTextr(sp = shp.pts, gridlist = cov.grids, os = "linux")
+pts.ext <- DSMprops::parPTextr(sp = shp.pts, gridlist = cov.grids, os = "linux",nthreads = 50)
 
-# cpus <- 50
-# cl <- makeCluster(cpus, type="FORK")
-# registerDoParallel(cl)
-# ov.lst <- parLapply(cl,cov.grids,function(i){try( raster::extract(raster(i), shp.pts) )})
-# stopCluster(cl)
-# ov.lst <- as.data.frame(ov.lst)
-# names(ov.lst) = tools::file_path_sans_ext(basename(cov.grids))
-# ov.lst$DID <- seq.int(nrow(ov.lst))
-# shp.pts$DID <- seq.int(nrow(shp.pts))
-# pts.ext <- merge(as.data.frame(shp.pts),ov.lst, by="DID")
-#
-# ## Save points
-# saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_SSURGO_SG100_covarsc.rds",sep=""))
+## Save points
+#saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_SSURGO_SG100_covarsc.rds",sep=""))
 ## Updated extract for CONUS
 pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_SSURGO_SG100_covarsc.rds",sep=""))
+
 ## Weed out duplicates
-pts.ext$locid <- paste(pts.ext$x,pts.ext$y,sep="_")
+pts.ext$locid <- paste(pts.ext$x_std,pts.ext$y_std,sep="_")
 pts.ext <- pts.ext[!duplicated(pts.ext$locid),]
 pts.ext$tid <- "nasis"
 
@@ -91,19 +82,28 @@ datastretchlab <- paste(datastretch,"x",sep="")
 
 
 ##### Load and prep SCD data
-scd.pts <- read.delim("/ped/GIS_Archive/NCSS_Soil_Characterization_Database_2017/NCSS17_PSDA_rkFrags_ttab.txt", stringsAsFactors = F)
+## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
+con <- dbConnect(RSQLite::SQLite(), "/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
+(ldm_names <- dbListTables(con))
+ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments"), function(x) dbReadTable(con , x))
+names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments")
+dbDisconnect(con)
+
+## Now wrangle tables
+scd.hor <- inner_join(ldm$NCSS_Layer,ldm$PSDA_and_Rock_Fragments[!duplicated(ldm$PSDA_and_Rock_Fragments$labsampnum),],by="labsampnum")
+scd.pts <- ldm$NCSS_Site_Location
+#scd.pts <- read.delim("/ped/GIS_Archive/NCSS_Soil_Characterization_Database_2017/NCSS17_PSDA_rkFrags_ttab.txt", stringsAsFactors = F)
+
 # ### SCD prep: Weed out points with imprecise coordinates ###
 # scd.pts$latnchar <- nchar(abs(scd.pts$latitude_decimal_degrees))
 # scd.pts$longnchar <- nchar(abs(scd.pts$longitude_decimal_degrees))
 # scd.pts <- subset(scd.pts, scd.pts$latnchar > 5 & scd.pts$longnchar > 6)
 ## Location ID for later use and remove duplicates
-scd.pts$locid <- paste(scd.pts$latitude_decimal_degrees,scd.pts$longitude_decimal_degrees,sep="_")
-scd.pts$hzn_bot_locid <- paste(scd.pts$hzn_bot,scd.pts$locid,sep="_") # compound ID to remove horizon duplicates
-scd.pts <- scd.pts[!duplicated(scd.pts$hzn_bot_locid),]
-
+scd.pts$locid <- paste(scd.pts$latitude_decimal,scd.pts$longitude_decima,sep="_")
+scd.pts <- scd.pts[!duplicated(scd.pts$locid),] # Over 20k duplicates...
 
 ### Turn into spatial file
-coordinates(scd.pts) <- ~ longitude_decimal_degrees + latitude_decimal_degrees
+coordinates(scd.pts) <- ~ longitude_decima + latitude_decimal
 temp.proj <- CRS("+proj=longlat +datum=WGS84") ## specify projection
 projection(scd.pts) <- temp.proj
 # ######## Clip with boundary if necessary ###########
@@ -112,37 +112,43 @@ scd.pts <- scd.pts[polybound,]
 
 ## Further SCD prep
 ## Extract covariates for prediction onto SCD points
-# rasterOptions(maxmemory = 4e+09)
-# cpus <- 50
-# cl <- makeCluster(cpus, type="FORK")
-# registerDoParallel(cl)
-# ov.lst <- parLapply(cl,cov.grids,function(i){try( raster::extract(raster(i), scd.pts) )})
-# stopCluster(cl)
-# ov.lst <- as.data.frame(ov.lst)
-# names(ov.lst) <- tools::file_path_sans_ext(basename(cov.grids))
-# ov.lst$DID <- seq.int(nrow(ov.lst))
-# scd.pts$DID <- seq.int(nrow(scd.pts))
-# scd.pts.ext <- merge(as.data.frame(scd.pts),ov.lst, by="DID")
-# ## Save scd pts with extraction
-# saveRDS(scd.pts.ext, paste(predfolder,"/SCD_PSD","_extracted_nasisSSURGO_SG100.rds",sep=""))
+scd.pts.ext <- DSMprops::parPTextr(scd.pts, cov.grids, os = "linux", nthreads=50)
+
+## Save scd pts with extraction
+#saveRDS(scd.pts.ext, paste(predfolder,"/SCD_PSD","_extracted_nasisSSURGO_SG100.rds",sep=""))
 scd.pts.ext <- readRDS(paste(predfolder,"/SCD_PSD","_extracted_nasisSSURGO_SG100.rds",sep=""))
 
+## Now join scd.hor to scd.pts and get rid of any duplicates
+scd.pts.ext.hor <- inner_join(scd.hor,scd.pts.ext, by="site_key")
+scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzn_bot,scd.pts.ext.hor$locid,sep="_") # compound ID to remove horizon duplicates
+scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
 
 ## SCD prep for RF
-scd.pts.ext$prop <- scd.pts.ext$sand_f_psa ## UPDATE everytime!
+scd.pts.ext.hor$prop <- scd.pts.ext.hor$sand_f_psa ## UPDATE everytime!
 scdprop <- "sand_f_psa"
-scd.pts.ext$tid <- "scd"
+scd.pts.ext.hor$tid <- "scd"
 
-## Prep base raster for density calculations
-# rasterOptions(maxmemory = 5e+08,chunksize = 5e+07)
-# beginCluster(50,type='SOCK')
-# crs.img <- CRS(projection(projgrid))
-# img10k <- projectRaster(projgrid,res=10000,method='bilinear',crs=crs.img)
-# values(img10k) <- 0
-# endCluster()
-# saveRDS(img10k,paste(predfolder,"/img10k.rds",sep=""))
-img10k <- readRDS(paste(predfolder,"/img10k.rds",sep=""))
-values(img10k) <- 1:ncell(img10k)
+## Prep base raster for density calculations and spatial cross validation
+rasterOptions(maxmemory = 5e+08,chunksize = 5e+07)
+cpus <- 50 #detectCores() - 1
+beginCluster(cpus,type='SOCK')
+crs.img <- CRS(projection(projgrid))
+img10k <- projectRaster(projgrid,res=10000,method='bilinear',crs=crs.img)
+endCluster()
+imgfun <- function(x){
+  ind <- ifelse(x>0,1,NA) ## need to make sure this makes sense for raster used
+  return(ind)
+}
+## 10k grid with valus of 1 for all pixels except nodata areas
+img10kf <- calc(img10k,fun=imgfun,progress="text")
+## Save file for future use
+#saveRDS(img10kf,paste(predfolder,"/img10kf.rds",sep=""))
+img10kf <- readRDS(paste(predfolder,"/img10kf.rds",sep=""))
+## Create another grid with unique values for each pixel excepting nodata areas
+## This is for use in the point density mapping
+img10kfid <- img10kf
+values(img10kfid) <- 1:ncell(img10kfid)
+img10kfid <- overlay(stack(img10kfid,img10kf),fun=function(a,b){a*b})
 
 ##### Loop to train and predict properties for all depths
 depths <- c(0,5,15,30,60,100,200)
@@ -151,20 +157,20 @@ for(d in depths){
   # pedonLocations <- unique(pts.extc$LocID) # if length differs from # of rows in pts, there are duplicates
   # pts.extc <- subset(pts.extc, !duplicated(pts.extc[c("LocID")])) #removes duplicates
   ptspred.list <- gsub(".tif","", cov.grids.names)# Take .tif off of the grid list to just get the variable names
-  ptspred.list <- c(ptspred.list,"prop","mtchtype","peiid","tid","x","y") #Add dependent variable
+  ptspred.list <- c(ptspred.list,"prop","mtchtype","peiid","tid","x_std","y_std") #Add dependent variable
   pts.extcc <- pts.extc[,c(ptspred.list)]## Or create a specific list of dependent variable and covariate names to use
   pts.extcc <- na.omit(pts.extcc)# Remove any record with NA's (in any column - be careful)
   ### Check for duplication with lab pedons
-  scd.pts.d <- subset(scd.pts.ext, as.numeric(scd.pts.ext$hzn_top) <= d & as.numeric(scd.pts.ext$hzn_bot) > d)
+  scd.pts.d <- subset(scd.pts.ext.hor, as.numeric(scd.pts.ext.hor$hzn_top) <= d & as.numeric(scd.pts.ext.hor$hzn_bot) > d)
   ## Remove SCD dups
   scd.pts.d <- scd.pts.d[!duplicated(scd.pts.d$locid),]
-  scd.pts.d$x <- scd.pts.d$longitude_decimal_degrees
-  scd.pts.d$y <- scd.pts.d$latitude_decimal_degrees
+  scd.pts.d$x_std <- scd.pts.d$longitude_decima
+  scd.pts.d$y_std <- scd.pts.d$latitude_decimal
   scd.pts.d$peiid <- scd.pts.d$locid
   scd.pts.d$mtchtype <- "scd"
   scd.pts.d$tid <- "scd"
-  ## Check for duplicated pedons betweeen NASIS and SCD
-  coordinates(scd.pts.d) <- ~ longitude_decimal_degrees + latitude_decimal_degrees
+  ## Check for duplicated pedons betweeen NASIS and SCD using buffers
+  coordinates(scd.pts.d) <- ~ longitude_decima + latitude_decimal
   projection(scd.pts.d) <- cov.proj
   pts.buf <- shp.pts[shp.pts$peiid %in% pts.extcc$peiid,]
   scd.pts.d.bufc <- raster::buffer(scd.pts.d,width=5,dissolve=F)
@@ -176,7 +182,7 @@ for(d in depths){
   scd.pts.d <- scd.pts.d[,c(ptspred.list)]
   scd.pts.d <- na.omit(scd.pts.d)
   pts.extcc <- rbind(pts.extcc,scd.pts.d)
-  coordinates(pts.extcc) <- ~ x + y
+  coordinates(pts.extcc) <- ~ x_std + y_std
   ## Characterize pt density for case weights
   polywin    <- as(polybound, "owin")
   #polywin <- as.owin(polybound)
@@ -185,25 +191,22 @@ for(d in depths){
   ## Bound the data
   Window(pts.ppp) <- polywin
   ## Set the raster grid to align with
-  pop  <- as.im.RasterLayer(img10k)
+  pop  <- as.im.RasterLayer(img10kfid)
   E    <- tess(image=pop)  # Create a tesselated surface
   Q   <- quadratcount(pts.ppp, tess = E)  # Tally counts
   Q.d <- intensity(Q, image=TRUE) # create density raster
   ## Rescale to per km basis and convert to raster
-  Qd.sgdf <- as.SpatialGridDataFrame.im(Q.d*1000000) # convert to SGDF and scale to pts per sq. km
+  Qd.sgdf <- as.SpatialGridDataFrame.im(Q.d*((raster::res(img10kfid)[1])^2)) # convert to SGDF and scale to pts per cell
   Qd.rast <- raster(Qd.sgdf)
-  writeRaster(Qd.rast, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",d,"_ptdensity_per_sqkm.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
-  pts.extcc <- extract(Qd.rast, pts.extcc, df=T, sp=T) ## pts.buf@data$v is the density (pts/sq km)
+  writeRaster(Qd.rast, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",d,"_ptdensity_per_cell.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
+  names(Qd.rast) <- "ptspercell"
+  pts.extcc <- extract(Qd.rast, pts.extcc, df=T, sp=T)
   ## Create spatial density based weights: better way to do this??
-  pts.extcc@data$sp_wghts <- ifelse(pts.extcc@data$v < 0.25, 0.9,NA)
-  pts.extcc@data$sp_wghts <- ifelse(is.na(pts.extcc@data$sp_wghts) & pts.extcc@data$v < 0.5, 0.75,pts.extcc@data$sp_wghts)
-  pts.extcc@data$sp_wghts <- ifelse(is.na(pts.extcc@data$sp_wghts) & pts.extcc@data$v < 1.0, 0.5,pts.extcc@data$sp_wghts)
-  pts.extcc@data$sp_wghts <- ifelse(is.na(pts.extcc@data$sp_wghts) & pts.extcc@data$v < 1.5, 0.4,pts.extcc@data$sp_wghts)
-  pts.extcc@data$sp_wghts <- ifelse(is.na(pts.extcc@data$sp_wghts), 0.25,pts.extcc@data$sp_wghts)
+  pts.extcc@data$sp_wghts <- 1-(pts.extcc@data$ptspercell / (max(pts.extcc@data$ptspercell)*1.1))
   ## Data quality weights
-  pts.extcc@data$qual_wts <- ifelse(pts.extcc@data$tid == "scd", 0.9,0.4)
+  pts.extcc@data$qual_wts <- ifelse(pts.extcc@data$tid == "scd", 1.0,0.5)
   ## Combined sample weights: better way to do?
-  pts.extcc@data$tot_wts <- (pts.extcc@data$sp_wghts + pts.extcc@data$qual_wts) / 2
+  pts.extcc@data$tot_wts <- pts.extcc@data$sp_wghts * pts.extcc@data$qual_wts
   ## Apply transformation
   if(trans=="log10") {pts.extcc$prop_t <- log10(pts.extcc$prop + 0.1)}
   if(trans=="log") {pts.extcc$prop_t <- log(pts.extcc$prop + 1)}
@@ -243,9 +246,13 @@ for(d in depths){
 
   ############ Cross Validate and examine metrics among Lab and Nasis pedons ##########
   ################### Manual Cross validation ################################
-  pts.extcvm <- pts.extcc@data
   nfolds <- 10
-  pts.extcvm$folds <- sample.int(nfolds,size =length(pts.extcvm[,1]),replace=T)
+  img10kcv <- img10kf
+  values(img10kcv) <- sample.int(nfolds,size =ncell(img10kcv),replace=T)
+  names(img10kcv) <- "folds"
+  pts.extcc <- extract(img10kcv, pts.extcc, df=T, sp=T)
+  pts.extcvm <- pts.extcc@data
+  #pts.extcvm$folds <- sample.int(nfolds,size =length(pts.extcvm[,1]),replace=T)
   #for (g in seq(nfolds)){
   CV_factorRF <- function(g){#,pts.extcvm, formulaStringCVm){
     traindf <- subset(pts.extcvm, pts.extcvm$folds != g)
