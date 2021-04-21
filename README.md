@@ -22,21 +22,23 @@ devtools::install_github("naumi421/DSMprops")
 Note that [Rtools](https://cran.r-project.org/bin/windows/Rtools/)
 (windows) or other pre-requisites (e.g.
 [Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-install-r-packages-using-devtools-on-ubuntu-18-04))
-are necessary for installing devtools. Alternatively, you can clone this
-repository locally and then build R package to have access to both
-package function calls and exec workflows.
+are necessary for installing devtools.
+
+To get both R package functionality and access to all exec workflows,
+you can clone this repository locally and then build R package to have
+access to both package function calls and workflows.
 
 In bash:
 
 ``` bash
-cd /path/where/repo/goes
-git clone naumi421/DSMprops.git
+$ cd /path/where/repo/goes
+$ git clone naumi421/DSMprops.git
 ```
 
 Rstudio also has options for cloning a repo with good guidance available
 at <https://happygitwithr.com/>.
 
-Once repository has been cloned. Open the R project in Rstudio anduse
+Once repository has been cloned. Open the R project in Rstudio and use
 *Build \> Install and Restart* to install DSMprops package which can
 then be used in other sessions outside of the project..
 
