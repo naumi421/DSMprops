@@ -372,12 +372,13 @@ for(d in depths){
 
   ## Ranger Predict
   predfun <- function(model, ...) predict(model, ...)$predictions
-  # pred <- predict(rasters, rf.qrf, fun=predfun, type="response", progress="text", num.threads = 50)
+  # TODO figure out why internal ranger parallelization did not seem to work.
+  # predtst <- predict(rasters, rf.qrf, fun=predfun, type="response", progress="text", num.threads = 50)
 
 
   ## Predict onto covariate grid
   ## Parallelized predict
-  rasterOptions(maxmemory = 5e+09,chunksize = 8e+08)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
+  rasterOptions(maxmemory = 5e+09,chunksize = 9e+08)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
   beginCluster(50,type='SOCK')
   Sys.time()
   predl <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.025)),progress="text")
