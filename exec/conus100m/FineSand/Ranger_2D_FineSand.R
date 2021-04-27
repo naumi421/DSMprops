@@ -9,7 +9,8 @@
 
 # Workspace setup
 # Install packages if not already installed
-required.packages <- c("raster", "sp", "rgdal", "ranger", "snow", "snowfall", "dplyr", "ggplot2","hexbin","doParallel","aqp","Hmisc","spatstat","maptools","DSMprops","RSQLite")
+required.packages <- c("raster", "sp", "rgdal", "ranger", "snow", "snowfall", "dplyr", "ggplot2",
+                       "hexbin","doParallel","aqp","Hmisc","spatstat","maptools","DSMprops","RSQLite")
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
@@ -53,11 +54,10 @@ shp.pts <- shp.pts[polybound,]
 # plot(shp.pts, add=TRUE)
 
 ## Parallelized extract: (larger datasets)
-rasterOptions(maxmemory = 4e+09)
-pts.ext <- DSMprops::parPTextr(sp = shp.pts, gridlist = cov.grids, os = "linux",nthreads = 50)
-
-## Save points
-#saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_SSURGO_SG100_covarsc.rds",sep=""))
+# rasterOptions(maxmemory = 4e+09)
+# pts.ext <- DSMprops::parPTextr(sp = shp.pts, gridlist = cov.grids, os = "linux",nthreads = 50)
+# ## Save points
+# saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_SSURGO_SG100_covarsc.rds",sep=""))
 ## Updated extract for CONUS
 pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_SSURGO_SG100_covarsc.rds",sep=""))
 
@@ -92,7 +92,6 @@ dbDisconnect(con)
 ## Now wrangle tables
 scd.hor <- inner_join(ldm$NCSS_Layer,ldm$PSDA_and_Rock_Fragments[!duplicated(ldm$PSDA_and_Rock_Fragments$labsampnum),],by="labsampnum")
 scd.pts <- ldm$NCSS_Site_Location
-#scd.pts <- read.delim("/ped/GIS_Archive/NCSS_Soil_Characterization_Database_2017/NCSS17_PSDA_rkFrags_ttab.txt", stringsAsFactors = F)
 
 # ### SCD prep: Weed out points with imprecise coordinates ###
 # scd.pts$latnchar <- nchar(abs(scd.pts$latitude_decimal_degrees))
@@ -103,7 +102,7 @@ scd.pts$locid <- paste(scd.pts$latitude_decimal,scd.pts$longitude_decima,sep="_"
 scd.pts <- scd.pts[!duplicated(scd.pts$locid),] # Over 20k duplicates...
 
 ### Turn into spatial file
-coordinates(scd.pts) <- ~ longitude_decima + latitude_decimal
+coordinates(scd.pts) <- ~ longitude_decima + latitude_decimal # Typos in sqlite KSSL snapshot...
 temp.proj <- CRS("+proj=longlat +datum=WGS84") ## specify projection
 projection(scd.pts) <- temp.proj
 # ######## Clip with boundary if necessary ###########
@@ -112,10 +111,9 @@ scd.pts <- scd.pts[polybound,]
 
 ## Further SCD prep
 ## Extract covariates for prediction onto SCD points
-scd.pts.ext <- DSMprops::parPTextr(scd.pts, cov.grids, os = "linux", nthreads=50)
-
-## Save scd pts with extraction
-#saveRDS(scd.pts.ext, paste(predfolder,"/SCD_PSD","_extracted_nasisSSURGO_SG100.rds",sep=""))
+# scd.pts.ext <- DSMprops::parPTextr(scd.pts, cov.grids, os = "linux", nthreads=50)
+# ## Save scd pts with extraction
+# saveRDS(scd.pts.ext, paste(predfolder,"/SCD_PSD","_extracted_nasisSSURGO_SG100.rds",sep=""))
 scd.pts.ext <- readRDS(paste(predfolder,"/SCD_PSD","_extracted_nasisSSURGO_SG100.rds",sep=""))
 
 ## Now join scd.hor to scd.pts and get rid of any duplicates
@@ -129,20 +127,20 @@ scdprop <- "sand_f_psa"
 scd.pts.ext.hor$tid <- "scd"
 
 ## Prep base raster for density calculations and spatial cross validation
-rasterOptions(maxmemory = 5e+08,chunksize = 5e+07)
-cpus <- 50 #detectCores() - 1
-beginCluster(cpus,type='SOCK')
-crs.img <- CRS(projection(projgrid))
-img10k <- projectRaster(projgrid,res=10000,method='bilinear',crs=crs.img)
-endCluster()
-imgfun <- function(x){
-  ind <- ifelse(x>0,1,NA) ## need to make sure this makes sense for raster used
-  return(ind)
-}
-## 10k grid with valus of 1 for all pixels except nodata areas
-img10kf <- calc(img10k,fun=imgfun,progress="text")
-## Save file for future use
-#saveRDS(img10kf,paste(predfolder,"/img10kf.rds",sep=""))
+# rasterOptions(maxmemory = 5e+08,chunksize = 5e+07)
+# cpus <- 50 #detectCores() - 1
+# beginCluster(cpus,type='SOCK')
+# crs.img <- CRS(projection(projgrid))
+# img10k <- projectRaster(projgrid,res=10000,method='ngb',crs=crs.img)
+# endCluster()
+# imgfun <- function(x){
+#   ind <- ifelse(x>0,1,NA) ## need to make sure this makes sense for raster used
+#   return(ind)
+# }
+# ## 10k grid with valus of 1 for all pixels except nodata areas
+# img10kf <- calc(img10k,fun=imgfun,progress="text")
+# ## Save file for future use
+# saveRDS(img10kf,paste(predfolder,"/img10kf.rds",sep=""))
 img10kf <- readRDS(paste(predfolder,"/img10kf.rds",sep=""))
 ## Create another grid with unique values for each pixel excepting nodata areas
 ## This is for use in the point density mapping
@@ -151,7 +149,7 @@ values(img10kfid) <- 1:ncell(img10kfid)
 img10kfid <- overlay(stack(img10kfid,img10kf),fun=function(a,b){a*b})
 
 ##### Loop to train and predict properties for all depths
-depths <- c(0,5,15,30,60,100,200)
+depths <- c(0,5,15,30,60,100,150)
 for(d in depths){
   pts.extc <- subset(pts.ext.hor, as.numeric(pts.ext.hor$hzdept_r) <= d & as.numeric(pts.ext.hor$hzdepb_r) > d) # subset to chosen depth
   # pedonLocations <- unique(pts.extc$LocID) # if length differs from # of rows in pts, there are duplicates
@@ -183,11 +181,10 @@ for(d in depths){
   scd.pts.d <- na.omit(scd.pts.d)
   pts.extcc <- rbind(pts.extcc,scd.pts.d)
   coordinates(pts.extcc) <- ~ x_std + y_std
+  projection(pts.extcc) <- cov.proj
   ## Characterize pt density for case weights
   polywin    <- as(polybound, "owin")
-  #polywin <- as.owin(polybound)
   pts.ppp    <- as(pts.buf, "ppp")
-  #pts.ppp    <- as.ppp(pts.buf, W=polywin)
   ## Bound the data
   Window(pts.ppp) <- polywin
   ## Set the raster grid to align with
@@ -212,14 +209,20 @@ for(d in depths){
   if(trans=="log") {pts.extcc$prop_t <- log(pts.extcc$prop + 1)}
   if(trans=="sqrt") {pts.extcc$prop_t <- sqrt(pts.extcc$prop)}
   if(trans=="none") {pts.extcc$prop_t <- pts.extcc$prop}
+  ## Save regression matrix file
+  # saveRDS(pts.extcc, paste(predfolder,"/trainPTS_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
+  pts.extcc <- readRDS(paste(predfolder,"/trainPTS_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
   ## Set up RF formula
   formulaStringRF <- as.formula(paste('prop_t ~', paste(gsub(".tif","", cov.grids.names), collapse="+")))
   ## Determine 95% interquartile range for relative prediction interval
-  varrange <- as.numeric(quantile(pts.extcc$prop, probs=c(0.975), na.rm=T)-quantile(pts.extcc$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
+  varrange <- as.numeric(quantile(pts.extcc@data$prop, probs=c(0.975), na.rm=T)-quantile(pts.extcc@data$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
 
   ############### Build quantile Random Forest
-  #detach(package:doParallel)
-  rf.qrf <- ranger(formulaStringRF, data=pts.extcc@data, num.trees = 100, quantreg = T, num.threads = 50, min.node.size = 1,case.weights = pts.extcc@data$tot_wts)
+  ## Set training parameters
+  trn.params <- list(ntrees = 100, min.node.size = 1)
+  rf.qrf <- ranger(formulaStringRF, data=pts.extcc@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 50,
+                   min.node.size = trn.params$min.node.size,
+                   case.weights = pts.extcc@data$tot_wts)
   ## OOB error
   rf.qrf
   ## Linear Adjustment for bias in low and high predictions
@@ -233,119 +236,113 @@ for(d in depths){
   x1 <-c(-100,0,100,10000,100000000)
   y1 <-c(-100,0,100,10000,100000000)
   # lines(x1,y1, col = 'red')#1:1 line
-  plot(pts.extcc@data$prop_t~pts.extcc@data$trainpreds) #Fit plot
-  lines(x1,y1, col = 'red')#1:1 line
-  plot(pts.extcc@data$prop_t~pts.extcc@data$trainpredsadj) #Adjusted Fit plot
-  lines(x1,y1, col = 'red')#1:1 line
+  # plot(pts.extcc@data$prop_t~pts.extcc@data$trainpreds) #Fit plot
+  # lines(x1,y1, col = 'red')#1:1 line
+  # plot(pts.extcc@data$prop_t~pts.extcc@data$trainpredsadj) #Adjusted Fit plot
+  # lines(x1,y1, col = 'red')#1:1 line
+  # TODO update for ranger variable importance
   #varImpPlot(rf.qrf)
+  ## Save important documentation and intermediate files as R objects
   saveRDS(rf.qrf, paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
   saveRDS(rf_lm_adj, paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm_nasisSSURGO_SG100.rds",sep=""))
+  ## Block to open prior files for updating work
   rf.qrf <- readRDS(paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
   rf_lm_adj <- readRDS(paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm_nasisSSURGO_SG100.rds",sep=""))
 
 
+
   ############ Cross Validate and examine metrics among Lab and Nasis pedons ##########
   ################### Manual Cross validation ################################
-  nfolds <- 10
-  img10kcv <- img10kf
-  values(img10kcv) <- sample.int(nfolds,size =ncell(img10kcv),replace=T)
-  names(img10kcv) <- "folds"
-  pts.extcc <- extract(img10kcv, pts.extcc, df=T, sp=T)
-  pts.extcvm <- pts.extcc@data
-  #pts.extcvm$folds <- sample.int(nfolds,size =length(pts.extcvm[,1]),replace=T)
-  #for (g in seq(nfolds)){
-  CV_factorRF <- function(g){#,pts.extcvm, formulaStringCVm){
-    traindf <- subset(pts.extcvm, pts.extcvm$folds != g)
-    testdf <- subset(pts.extcvm, pts.extcvm$folds == g)
-    rf.pcv <- ranger(formulaStringRF, data=traindf, num.trees = 100, quantreg = T, num.threads = 5, min.node.size = 1,case.weights = traindf$tot_wts)
-    traindf$pcvpredpre <- predict(rf.pcv,data=traindf, num.threads = 5)$predictions #predict(rf.qrf,data=pts.extcc@data)$predictions
-    testdf$pcvpredpre <- predict(rf.pcv, data=testdf, num.threads = 5)$predictions
-    #traindf$pcvpredpre <- predict(rf.pcv, newdata=traindf, what=c(0.5)) ## If median is desired
-    #testdf$pcvpredpre <- predict(rf.pcv, newdata=testdf,, what=c(0.5)) ## If median is desired
-    testdf$pcvpredpre.025 <- predict(rf.pcv, data=testdf, type = "quantiles", quantiles = c(0.025), num.threads = 5)$predictions
-    testdf$pcvpredpre.975 <- predict(rf.pcv, data=testdf, type = "quantiles", quantiles = c(0.975), num.threads = 5)$predictions
-    attach(traindf)
-    lm.pcv <- lm(prop_t~pcvpredpre)
-    detach(traindf)
-    testdf$pcvpred <- predict(lm.pcv, newdata=testdf)
-    return(testdf)
-  }
-  ## Windows
-  # snowfall::sfInit(parallel=TRUE, cpus=nfolds)
-  # snowfall::sfExport("pts.extcvm","formulaStringRF","CV_factorRF")
-  # snowfall::sfLibrary(randomForest)
-  # snowfall::sfLibrary(quantregForest)
-  # pts.extpcv <- snowfall::sfLapply(1:nfolds, function(g){CV_factorRF(g, pts.extcvm=pts.extcvm,formulaStringCVm=formulaStringCVm)})
-  # snowfall::sfStop()
-  ## Linux
-  cpus <- nfolds
-  cl <- makeCluster(cpus, type="FORK")
-  registerDoParallel(cl)
-  pts.extpcv.lst <- parLapply(cl,1:nfolds,try(CV_factorRF))
-  stopCluster(cl)
-  pts.extpcv <- plyr::rbind.fill(pts.extpcv.lst)
-  pts.extpcv$pcvpred <- as.numeric(pts.extpcv$pcvpred)
+  pts.pcv <- DSMprops::CVranger(x = pts.extcc@data, fm = formulaStringRF, train.params = trn.params,
+                                nfolds = 10, nthreads = 50, os = "linux") # 5min
+  pts.pcv$valtype <- "pcv10f"
+
+  pts.s1cv <- DSMprops::SpatCVranger(sp = pts.extcc, fm = formulaStringRF, train.params = trn.params,
+                                     rast = img10kf, nfolds = 10, nthreads = 50, resol = 1, os = "linux") # 6 min
+  pts.s1cv$valtype <- "s1cv10f"
+
+  pts.s10cv <- DSMprops::SpatCVranger(sp = pts.extcc, fm = formulaStringRF, train.params = trn.params,
+                                      rast = img10kf, nfolds = 10, nthreads = 50, resol = 10, os = "linux") # 6min
+  pts.s10cv$valtype <- "s10cv10f"
+
+  pts.s100cv <- DSMprops::SpatCVranger(sp = pts.extcc, fm = formulaStringRF, train.params = trn.params,
+                                       rast = img10kf, nfolds = 10, nthreads = 50, resol = 100, os = "linux")
+  pts.s100cv$valtype <- "s100cv10f"
+
+  ## Combine CV tables and save in list as R object
+  cv.lst <- list(pts.pcv,pts.s1cv,pts.s10cv,pts.s100cv)
+  saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep="")) # takes forever...
+  #cv.lst <- readRS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
+
 
   ## Validation metrics
-  ## PCV statistics: all data
-  cvp.RMSE = sqrt(mean((pts.extpcv$prop_t - pts.extpcv$pcvpred)^2, na.rm=TRUE))
-  cvp.Rsquared = 1-var(pts.extpcv$prop_t - pts.extpcv$pcvpred, na.rm=TRUE)/var(pts.extpcv$prop_t, na.rm=TRUE)
-  ## Back transformed: create pcvpred_bt even if not tranformed for cv.depth function: Using Duan's smearing estimator
-  if(trans=="log10") {pts.extpcv$pcvpred_bt <- (10^(pts.extpcv$pcvpred) - 0.1)*(mean(10^(pts.extpcv$prop_t - pts.extpcv$trainpredsadj)))}
-  if(trans=="log") {pts.extpcv$pcvpred_bt <- (exp(pts.extpcv$pcvpred) - 1)*(mean(exp(pts.extpcv$prop_t - pts.extpcv$trainpredsadj)))}
-  if(trans=="sqrt") {pts.extpcv$pcvpred_bt <- ((pts.extpcv$pcvpred)^2)*(mean((pts.extpcv$prop_t - pts.extpcv$trainpredsadj)^2))}
-  if(trans=="none") {pts.extpcv$pcvpred_bt <- pts.extpcv$pcvpred}
-  ## Untransformed calcs
-  cvp.RMSE_bt = sqrt(mean((pts.extpcv$prop - pts.extpcv$pcvpred_bt)^2, na.rm=TRUE))
-  cvp.Rsquared_bt = 1-var(pts.extpcv$prop - pts.extpcv$pcvpred_bt, na.rm=TRUE)/var(pts.extpcv$prop, na.rm=TRUE)
-  ## PCV stats for scd points
-  pts.extpcv.scd <- subset(pts.extpcv, pts.extpcv$tid == "scd")
-  cvp.RMSE.scd <- sqrt(mean((pts.extpcv.scd$prop_t - pts.extpcv.scd$pcvpred)^2, na.rm=TRUE))
-  cvp.Rsquared.scd <- 1-var(pts.extpcv.scd$prop_t - pts.extpcv.scd$pcvpred, na.rm=TRUE)/var(pts.extpcv.scd$prop_t, na.rm=TRUE)
-  # cvp.RMSE.scdc <- sqrt(mean((pts.extpcv.scd$prop_tc - pts.extpcv.scd$pcvpred)^2, na.rm=TRUE))
-  # cvp.Rsquared.scdc <- 1-var(pts.extpcv.scd$prop_tc - pts.extpcv.scd$pcvpred, na.rm=TRUE)/var(pts.extpcv.scd$prop_t, na.rm=TRUE)
-  ## PCV stats for scd points: backtransformed
-  cvp.RMSE.scd_bt <- sqrt(mean((pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt)^2, na.rm=TRUE))
-  cvp.Rsquared.scd_bt <- 1-var(pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt, na.rm=TRUE)/var(pts.extpcv.scd$prop, na.rm=TRUE)
-  ## Number of SCD samples
-  n_scd <- length(pts.extpcv.scd[,1])
-  ## RPI
-  ## Back transform low PI
-  # TODO Not sure if smearing estimator should be used on PIs? Probably not since the linear
-  # adjustment does not apply.
-  if(trans=="log10") {pts.extpcv$pcvpredpre.025_bt <- 10^(pts.extpcv$pcvpredpre.025) - 0.1}
-  if(trans=="log") {pts.extpcv$pcvpredpre.025_bt <- exp(pts.extpcv$pcvpredpre.025) - 1}
-  if(trans=="sqrt") {pts.extpcv$pcvpredpre.025_bt <- (pts.extpcv$pcvpredpre.025)^2}
-  if(trans=="none") {pts.extpcv$pcvpredpre.025_bt <- pts.extpcv$pcvpredpre.025}
-  ## Back transform Upper PI
-  if(trans=="log10") {pts.extpcv$pcvpredpre.975_bt <- 10^(pts.extpcv$pcvpredpre.975) - 0.1}
-  if(trans=="log") {pts.extpcv$pcvpredpre.975_bt <- exp(pts.extpcv$pcvpredpre.975) - 1}
-  if(trans=="sqrt") {pts.extpcv$pcvpredpre.975_bt <- (pts.extpcv$pcvpredpre.975)^2}
-  if(trans=="none") {pts.extpcv$pcvpredpre.975_bt <- pts.extpcv$pcvpredpre.975}
-  ## Calculate different metrics
-  pts.extpcv$abs.resid <- abs(pts.extpcv$prop - pts.extpcv$pcvpred_bt)
-  pts.extpcv$RPI <- (pts.extpcv$pcvpredpre.975_bt - pts.extpcv$pcvpredpre.025_bt)/varrange
-  plot(pts.extpcv$abs.resid~pts.extpcv$RPI) # Quick look at relationship
-  ## Summarize RPI and residuals
-  ## Back transform original property to avoid bias in PICP
-  if(trans=="log10") {pts.extpcv$prop_bt <- 10^(pts.extpcv$prop_t) - 0.1}
-  if(trans=="log") {pts.extpcv$prop_bt <- exp(pts.extpcv$prop_t) - 1}
-  if(trans=="sqrt") {pts.extpcv$prop_bt <- (pts.extpcv$prop_t)^2}
-  if(trans=="none") {pts.extpcv$prop_bt <- pts.extpcv$prop_t}
-  pts.extpcv$rel.abs.resid <- pts.extpcv$abs.resid/varrange
-  RPI.cvave <- mean(pts.extpcv$RPI)
-  RPI.cvmed <- median(pts.extpcv$RPI)
-  rel.abs.res.ave <- mean(pts.extpcv$rel.abs.resid)
-  rel.abs.res.med <- median(pts.extpcv$rel.abs.resid)
-  pts.extpcv$BTbias <- pts.extpcv$prop_bt - pts.extpcv$prop
-  BTbias.abs.max <- max(abs(pts.extpcv$BTbias))
-  BTbias.ave <- mean(pts.extpcv$BTbias)
-  PICP <- sum(ifelse(pts.extpcv$prop_bt <= pts.extpcv$pcvpredpre.975_bt & pts.extpcv$prop_bt >= pts.extpcv$pcvpredpre.025_bt,1,0))/length(pts.extpcv[,1])
-  ## Create PCV table
-  CVdf <- data.frame(cvp.RMSE, cvp.Rsquared, cvp.RMSE_bt, cvp.Rsquared_bt, cvp.RMSE.scd, cvp.Rsquared.scd,  cvp.RMSE.scd_bt, cvp.Rsquared.scd_bt,n_scd,RPI.cvave,RPI.cvmed,PICP,rel.abs.res.ave,rel.abs.res.med,BTbias.abs.max,BTbias.ave)
-  names(CVdf) <- c("cvp.RMSE","cvp.Rsquared","cvp.RMSE_bt", "cvp.Rsquared_bt", "cvp.RMSE.scd", "cvp.Rsquared.scd", "cvp.RMSE.scd_bt", "cvp.Rsquared.scd_bt","n_scd","RPI.CVave","RPI.CVmed","PICP","rel.abs.res.ave","rel.abs.res.med","BTbias.abs.max","BTbias.ave")
-  write.table(CVdf, paste(predfolder,"/PCVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
-  # CV plot all
+  valmets <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, varrange = varrange, prop = prop, depth = d)
+  write.table(valmets, paste(predfolder,"/CVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
+
+  # ## PCV statistics: all data
+  # cvp.RMSE = sqrt(mean((pts.extpcv$prop_t - pts.extpcv$pcvpred)^2, na.rm=TRUE))
+  # cvp.Rsquared = 1-var(pts.extpcv$prop_t - pts.extpcv$pcvpred, na.rm=TRUE)/var(pts.extpcv$prop_t, na.rm=TRUE)
+  # ## Back transformed: create pcvpred_bt even if not tranformed for cv.depth function: Using Duan's smearing estimator
+  # if(trans=="log10") {pts.extpcv$pcvpred_bt <- (10^(pts.extpcv$pcvpred) - 0.1)*(mean(10^(pts.extpcv$prop_t - pts.extpcv$trainpredsadj)))}
+  # if(trans=="log") {pts.extpcv$pcvpred_bt <- (exp(pts.extpcv$pcvpred) - 1)*(mean(exp(pts.extpcv$prop_t - pts.extpcv$trainpredsadj)))}
+  # if(trans=="sqrt") {pts.extpcv$pcvpred_bt <- ((pts.extpcv$pcvpred)^2)*(mean((pts.extpcv$prop_t - pts.extpcv$trainpredsadj)^2))}
+  # if(trans=="none") {pts.extpcv$pcvpred_bt <- pts.extpcv$pcvpred}
+  # ## Untransformed calcs
+  # cvp.RMSE_bt = sqrt(mean((pts.extpcv$prop - pts.extpcv$pcvpred_bt)^2, na.rm=TRUE))
+  # cvp.Rsquared_bt = 1-var(pts.extpcv$prop - pts.extpcv$pcvpred_bt, na.rm=TRUE)/var(pts.extpcv$prop, na.rm=TRUE)
+  # ## PCV stats for scd points
+  # pts.extpcv.scd <- subset(pts.extpcv, pts.extpcv$tid == "scd")
+  # cvp.RMSE.scd <- sqrt(mean((pts.extpcv.scd$prop_t - pts.extpcv.scd$pcvpred)^2, na.rm=TRUE))
+  # cvp.Rsquared.scd <- 1-var(pts.extpcv.scd$prop_t - pts.extpcv.scd$pcvpred, na.rm=TRUE)/var(pts.extpcv.scd$prop_t, na.rm=TRUE)
+  # # cvp.RMSE.scdc <- sqrt(mean((pts.extpcv.scd$prop_tc - pts.extpcv.scd$pcvpred)^2, na.rm=TRUE))
+  # # cvp.Rsquared.scdc <- 1-var(pts.extpcv.scd$prop_tc - pts.extpcv.scd$pcvpred, na.rm=TRUE)/var(pts.extpcv.scd$prop_t, na.rm=TRUE)
+  # ## PCV stats for scd points: backtransformed
+  # cvp.RMSE.scd_bt <- sqrt(mean((pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt)^2, na.rm=TRUE))
+  # cvp.Rsquared.scd_bt <- 1-var(pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt, na.rm=TRUE)/var(pts.extpcv.scd$prop, na.rm=TRUE)
+  # ## Number of SCD samples
+  # n_scd <- length(pts.extpcv.scd[,1])
+  # ## RPI
+  # ## Back transform low PI
+  # # TODO Not sure if smearing estimator should be used on PIs? Probably not since the linear
+  # # adjustment does not apply.
+  # if(trans=="log10") {pts.extpcv$pcvpredpre.025_bt <- 10^(pts.extpcv$pcvpredpre.025) - 0.1}
+  # if(trans=="log") {pts.extpcv$pcvpredpre.025_bt <- exp(pts.extpcv$pcvpredpre.025) - 1}
+  # if(trans=="sqrt") {pts.extpcv$pcvpredpre.025_bt <- (pts.extpcv$pcvpredpre.025)^2}
+  # if(trans=="none") {pts.extpcv$pcvpredpre.025_bt <- pts.extpcv$pcvpredpre.025}
+  # ## Back transform Upper PI
+  # if(trans=="log10") {pts.extpcv$pcvpredpre.975_bt <- 10^(pts.extpcv$pcvpredpre.975) - 0.1}
+  # if(trans=="log") {pts.extpcv$pcvpredpre.975_bt <- exp(pts.extpcv$pcvpredpre.975) - 1}
+  # if(trans=="sqrt") {pts.extpcv$pcvpredpre.975_bt <- (pts.extpcv$pcvpredpre.975)^2}
+  # if(trans=="none") {pts.extpcv$pcvpredpre.975_bt <- pts.extpcv$pcvpredpre.975}
+  # ## Calculate different metrics
+  # pts.extpcv$abs.resid <- abs(pts.extpcv$prop - pts.extpcv$pcvpred_bt)
+  # pts.extpcv$RPI <- (pts.extpcv$pcvpredpre.975_bt - pts.extpcv$pcvpredpre.025_bt)/varrange
+  # plot(pts.extpcv$abs.resid~pts.extpcv$RPI) # Quick look at relationship
+  # ## Summarize RPI and residuals
+  # ## Back transform original property to avoid bias in PICP
+  # if(trans=="log10") {pts.extpcv$prop_bt <- 10^(pts.extpcv$prop_t) - 0.1}
+  # if(trans=="log") {pts.extpcv$prop_bt <- exp(pts.extpcv$prop_t) - 1}
+  # if(trans=="sqrt") {pts.extpcv$prop_bt <- (pts.extpcv$prop_t)^2}
+  # if(trans=="none") {pts.extpcv$prop_bt <- pts.extpcv$prop_t}
+  # pts.extpcv$rel.abs.resid <- pts.extpcv$abs.resid/varrange
+  # RPI.cvave <- mean(pts.extpcv$RPI)
+  # RPI.cvmed <- median(pts.extpcv$RPI)
+  # rel.abs.res.ave <- mean(pts.extpcv$rel.abs.resid)
+  # rel.abs.res.med <- median(pts.extpcv$rel.abs.resid)
+  # pts.extpcv$BTbias <- pts.extpcv$prop_bt - pts.extpcv$prop
+  # BTbias.abs.max <- max(abs(pts.extpcv$BTbias))
+  # BTbias.ave <- mean(pts.extpcv$BTbias)
+  # PICP <- sum(ifelse(pts.extpcv$prop_bt <= pts.extpcv$pcvpredpre.975_bt & pts.extpcv$prop_bt >= pts.extpcv$pcvpredpre.025_bt,1,0))/length(pts.extpcv[,1])
+  # ## Create PCV table
+  # CVdf <- data.frame(cvp.RMSE, cvp.Rsquared, cvp.RMSE_bt, cvp.Rsquared_bt, cvp.RMSE.scd, cvp.Rsquared.scd,  cvp.RMSE.scd_bt, cvp.Rsquared.scd_bt,n_scd,RPI.cvave,RPI.cvmed,PICP,rel.abs.res.ave,rel.abs.res.med,BTbias.abs.max,BTbias.ave)
+  # names(CVdf) <- c("cvp.RMSE","cvp.Rsquared","cvp.RMSE_bt", "cvp.Rsquared_bt", "cvp.RMSE.scd", "cvp.Rsquared.scd", "cvp.RMSE.scd_bt", "cvp.Rsquared.scd_bt","n_scd","RPI.CVave","RPI.CVmed","PICP","rel.abs.res.ave","rel.abs.res.med","BTbias.abs.max","BTbias.ave")
+  # write.table(CVdf, paste(predfolder,"/PCVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
+
+  ## Save Cross validation graph and data for future plotting
+  saveRDS(pts.extpcv, paste(predfolder,"/cvlm_preds_2D_",prop, "_", d, "_cm_nasisSSURGO_SG100.rds", sep=""))
+
+  ###### Cross validation plots
+  ## All data
   viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
   gplt.dcm.2D.CV <- ggplot(data=pts.extpcv, aes(prop_t, pcvpred)) +
     stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
@@ -362,10 +359,9 @@ for(d in depths){
     ggtitle(paste("Cross val", prop, d, "cm",sep=" "))
   gplt.dcm.2D.CV.SCD
   ggsave(paste(predfolder,'/ValPlot_1to1_scd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.SCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
-  ## Save Cross validation graph and data for future plotting
-  saveRDS(pts.extpcv, paste(predfolder,"/cvlm_preds_2D_",prop, "_", d, "_cm_nasisSSURGO_SG100.rds", sep=""))
 
 
+  ############################## Raster Preditions ######################################################
   ##### Reference covar rasters to use in prediction
   rasters <- stack(cov.grids)
   #names(rasters)
