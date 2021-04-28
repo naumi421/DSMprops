@@ -22,8 +22,9 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     model <- paste(prop,depth,"cm",sep="_")
     valtype <- pts.extpcv$valtype[1]
     ## CV statistics: all data
-    RMSE = sqrt(mean((pts.extpcv$prop_t - pts.extpcv$pcvpred)^2, na.rm=TRUE))
-    Rsq = 1-var(pts.extpcv$prop_t - pts.extpcv$pcvpred, na.rm=TRUE)/var(pts.extpcv$prop_t, na.rm=TRUE)
+    n <- length(pts.extpcv[,1])
+    RMSE <- sqrt(mean((pts.extpcv$prop_t - pts.extpcv$pcvpred)^2, na.rm=TRUE))
+    Rsq <- 1-var(pts.extpcv$prop_t - pts.extpcv$pcvpred, na.rm=TRUE)/var(pts.extpcv$prop_t, na.rm=TRUE)
     Rsqpre <- 1-var(pts.extpcv$prop_t - pts.extpcv$pcvpredpre, na.rm=TRUE)/var(pts.extpcv$prop_t, na.rm=TRUE)
     Bias <- mean(pts.extpcv$prop_t - pts.extpcv$pcvpred, na.rm=TRUE)/mean(pts.extpcv$prop_t, na.rm=T)
     ## Back transformed: create pcvpred_bt even if not tranformed for cv.depth function: Using Duan's smearing estimator
@@ -32,8 +33,8 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     if(trans=="sqrt") {pts.extpcv$pcvpred_bt <- ((pts.extpcv$pcvpred)^2)*(mean((pts.extpcv$prop_t - pts.extpcv$trainpredsadj)^2))}
     if(trans=="none") {pts.extpcv$pcvpred_bt <- pts.extpcv$pcvpred}
     ## Untransformed calcs
-    RMSE_bt = sqrt(mean((pts.extpcv$prop - pts.extpcv$pcvpred_bt)^2, na.rm=TRUE))
-    Rsq_bt = 1-var(pts.extpcv$prop - pts.extpcv$pcvpred_bt, na.rm=TRUE)/var(pts.extpcv$prop, na.rm=TRUE)
+    RMSE_bt <- sqrt(mean((pts.extpcv$prop - pts.extpcv$pcvpred_bt)^2, na.rm=TRUE))
+    Rsq_bt <- 1-var(pts.extpcv$prop - pts.extpcv$pcvpred_bt, na.rm=TRUE)/var(pts.extpcv$prop, na.rm=TRUE)
     MAE_bt <- mean(abs(pts.extpcv$prop - pts.extpcv$pcvpred_bt), na.rm=TRUE) # Mean Absolute Accuracy
     MedAE_bt <- median(abs(pts.extpcv$prop - pts.extpcv$pcvpred_bt), na.rm=TRUE) # Median Absolute Accuracy
     Bias_bt <- mean(pts.extpcv$prop - pts.extpcv$pcvpred_bt, na.rm=TRUE)/mean(pts.extpcv$prop_t, na.rm=T)
@@ -81,14 +82,13 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     BTbias.ave <- mean(pts.extpcv$BTbias)
     PICP <- sum(ifelse(pts.extpcv$prop_bt <= pts.extpcv$pcvpredpre.975_bt & pts.extpcv$prop_bt >= pts.extpcv$pcvpredpre.025_bt,1,0))/length(pts.extpcv[,1])
     ## Create CV statistics table
-    CVdf <- data.frame(model, valtype, RMSE, Rsq, Rsqpre, Bias, RMSE_bt, Rsq_bt, MAE_bt, MedAE_bt, Bias_bt, RMSE.scd, Rsq.scd, RMSE.scd_bt, Rsq.scd_bt, MAE.scd_bt, MedAE.scd_bt, Bias.scd_bt, n_scd,RPI.cvave,RPI.cvmed,PICP,rel.abs.res.ave,rel.abs.res.med,BTbias.abs.max,BTbias.ave)
-    names(CVdf) <- c("model","valtype","RMSE","Rsq", "Rsqpre","Bias","RMSE_bt", "Rsq_bt","MAE_bt","MedAE_bt","Bias_bt", "RMSE.scd", "Rsq.scd", "RMSE.scd_bt", "Rsq.scd_bt","MAE.scd_bt","MedAE.scd_bt","Bias.scd_bt","n_scd","RPI.CVave","RPI.CVmed","PICP","rel.abs.res.ave","rel.abs.res.med","BTbias.abs.max","BTbias.ave")
+    CVdf <- data.frame(model, valtype, n, RMSE, Rsq, Rsqpre, Bias, RMSE_bt, Rsq_bt, MAE_bt, MedAE_bt, Bias_bt, RMSE.scd, Rsq.scd, RMSE.scd_bt, Rsq.scd_bt, MAE.scd_bt, MedAE.scd_bt, Bias.scd_bt, n_scd,RPI.cvave,RPI.cvmed,PICP,rel.abs.res.ave,rel.abs.res.med,BTbias.abs.max,BTbias.ave)
     return(CVdf)
   }
 
   ## list apply of function
   CVdf.lst <- lapply(valseq,valfn)
-  CVdfall <- plyr::rbind.fill(CVdf.lst)
+  CVdfall <- do.call("rbind", CVdf.lst)
   return(CVdfall)
 
 }

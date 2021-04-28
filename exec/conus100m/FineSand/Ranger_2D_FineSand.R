@@ -270,9 +270,9 @@ for(d in depths){
   pts.s100cv$valtype <- "s100cv10f"
 
   ## Combine CV tables and save in list as R object
-  cv.lst <- list(pts.pcv,pts.s1cv,pts.s10cv,pts.s100cv)
-  saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep="")) # takes forever...
-  #cv.lst <- readRS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
+  # cv.lst <- list(pts.pcv,pts.s1cv,pts.s10cv,pts.s100cv)
+  # saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep="")) # takes forever...
+  cv.lst <- readRDS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
 
 
   ## Validation metrics
