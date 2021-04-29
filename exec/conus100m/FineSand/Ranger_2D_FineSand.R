@@ -199,11 +199,11 @@ for(d in depths){
   names(Qd.rast) <- "ptspercell"
   pts.extcc <- extract(Qd.rast, pts.extcc, df=T, sp=T)
   ## Create spatial density based weights: better way to do this??
-  pts.extcc@data$sp_wghts <- 1-(pts.extcc@data$ptspercell / (max(pts.extcc@data$ptspercell)*1.1))
+  pts.extcc@data$sp_wts <- 1-(pts.extcc@data$ptspercell / (max(pts.extcc@data$ptspercell)*1.1))
   ## Data quality weights
   pts.extcc@data$qual_wts <- ifelse(pts.extcc@data$tid == "scd", 1.0,0.5)
   ## Combined sample weights: better way to do?
-  pts.extcc@data$tot_wts <- pts.extcc@data$sp_wghts * pts.extcc@data$qual_wts
+  pts.extcc@data$tot_wts <- pts.extcc@data$sp_wts * pts.extcc@data$qual_wts
   ## Apply transformation
   if(trans=="log10") {pts.extcc$prop_t <- log10(pts.extcc$prop + 0.1)}
   if(trans=="log") {pts.extcc$prop_t <- log(pts.extcc$prop + 1)}
@@ -217,9 +217,89 @@ for(d in depths){
   ## Determine 95% interquartile range for relative prediction interval
   varrange <- as.numeric(quantile(pts.extcc@data$prop, probs=c(0.975), na.rm=T)-quantile(pts.extcc@data$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
 
-  ############### Build quantile Random Forest
+
+  ############ Cross Validate and examine metrics among Lab and Nasis pedons ##########
+  ################### Manual Cross validation ################################
+  ## TODO ? model tuning step for mtry, min node size, ntrees, other params???
   ## Set training parameters
   trn.params <- list(ntrees = 100, min.node.size = 1)
+
+  ## Normal 10-fold cross validation
+  pts.pcv <- DSMprops::CVranger(x = pts.extcc@data, fm = formulaStringRF, train.params = trn.params,
+                                nfolds = 10, nthreads = 50, os = "linux") # 5min
+  pts.pcv$valtype <- "pcv10f"
+  ## Spatial 10-fold cross validation on 1km blocks
+  pts.s1cv <- DSMprops::SpatCVranger(sp = pts.extcc, fm = formulaStringRF, train.params = trn.params,
+                                     rast = img10kf, nfolds = 10, nthreads = 50, resol = 1, os = "linux") # 6 min
+  pts.s1cv$valtype <- "s1cv10f"
+  ## Spatial 10-fold cross validation on 10km blocks
+  pts.s10cv <- DSMprops::SpatCVranger(sp = pts.extcc, fm = formulaStringRF, train.params = trn.params,
+                                      rast = img10kf, nfolds = 10, nthreads = 50, resol = 10, os = "linux") # 6min
+  pts.s10cv$valtype <- "s10cv10f"
+  ## Spatial 10-fold cross validation on 100km blocks
+  pts.s100cv <- DSMprops::SpatCVranger(sp = pts.extcc, fm = formulaStringRF, train.params = trn.params,
+                                       rast = img10kf, nfolds = 10, nthreads = 50, resol = 100, os = "linux")
+  pts.s100cv$valtype <- "s100cv10f"
+
+  ## Combine CV tables and save in list as R object
+  # cv.lst <- list(pts.pcv,pts.s1cv,pts.s10cv,pts.s100cv)
+  # saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep="")) # takes forever...
+  cv.lst <- readRDS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
+
+  ## Validation metrics for CVs at different spatial supports
+  valmets <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, varrange = varrange, prop = prop, depth = d)
+  write.table(valmets, paste(predfolder,"/CVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
+
+  ## Now prepare a case.weights grid search using the chosen cross validation approach
+  qual_wts <- c("full","mid","none")
+  sp_wts <- c("full","mid","none")
+  wt_grid <- expand.grid(qual=qual_wts, spat=sp_wghts, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
+  CV_wt_grid_fn <- function(x){
+    levs <- wt_grid[x,]
+    ptseval <- pts.extcc
+    if(levs$qual == "mid"){ptseval@data$qual_wts <- sqrt(ptseval@data$qual_wts)}
+    if(levs$qual == "none"){ptseval@data$qual_wts <- 1}
+    if(levs$spat == "mid"){ptseval@data$sp_wts <- sqrt(ptseval@data$sp_wts)}
+    if(levs$spat == "none"){ptseval@data$sp_wts <- 1}
+    ptseval@data$tot_wts <- ptseval@data$qual_wts * ptseval@data$sp_wts
+    ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
+                                        rast = img10kf, nfolds = 10, nthreads = 60, resol = 10, os = "linux")
+    ptsevalcv$cvgrid <- paste(colnames(levs),levs[1,],collapse="_",sep="_")
+    ptsevalcv$valtype <- "s10cv10f"
+    return(ptsevalcv)
+  }
+  ## List apply implementation
+  Sys.time()
+  CV_wtgrid_lst <- lapply(1:nrow(wt_grid),CV_wt_grid_fn)
+  Sys.time()
+  ## Validation metrics for CVs with different case weighting schemes
+  WtGrid_valmets <- DSMprops::valmetrics(xlst = CV_wtgrid_lst, trans = trans, varrange = varrange, prop = prop, depth = d)
+  write.table(WtGrid_valmets, paste(predfolder,"/WtGrid_CVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
+
+
+  ###### Cross validation plots
+  ## All data
+  viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
+  gplt.dcm.2D.CV <- ggplot(data=pts.extpcv, aes(prop_t, pcvpred)) +
+    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
+    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
+    xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri)) +
+    ggtitle(paste("Cross val", prop, d, "cm",sep=" "))
+  gplt.dcm.2D.CV
+  ggsave(paste(predfolder,'/ValPlot_1to1_all_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
+  ## Now just SCD pedons
+  gplt.dcm.2D.CV.SCD <- ggplot(data=pts.extpcv.scd, aes(prop_t, pcvpred)) +
+    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1)  + #xlim(-5,105) + ylim(-5,105) +
+    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
+    xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri)) +
+    ggtitle(paste("Cross val", prop, d, "cm",sep=" "))
+  gplt.dcm.2D.CV.SCD
+  ggsave(paste(predfolder,'/ValPlot_1to1_scd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.SCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
+
+
+  ############### Build quantile Random Forest
+  ## TODO incorporate updated weighting or tuning parameters???????
+  ## Train global ranger model
   rf.qrf <- ranger(formulaStringRF, data=pts.extcc@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 50,
                    min.node.size = trn.params$min.node.size,
                    case.weights = pts.extcc@data$tot_wts)
@@ -248,117 +328,6 @@ for(d in depths){
   ## Block to open prior files for updating work
   rf.qrf <- readRDS(paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
   rf_lm_adj <- readRDS(paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm_nasisSSURGO_SG100.rds",sep=""))
-
-
-
-  ############ Cross Validate and examine metrics among Lab and Nasis pedons ##########
-  ################### Manual Cross validation ################################
-  pts.pcv <- DSMprops::CVranger(x = pts.extcc@data, fm = formulaStringRF, train.params = trn.params,
-                                nfolds = 10, nthreads = 50, os = "linux") # 5min
-  pts.pcv$valtype <- "pcv10f"
-
-  pts.s1cv <- DSMprops::SpatCVranger(sp = pts.extcc, fm = formulaStringRF, train.params = trn.params,
-                                     rast = img10kf, nfolds = 10, nthreads = 50, resol = 1, os = "linux") # 6 min
-  pts.s1cv$valtype <- "s1cv10f"
-
-  pts.s10cv <- DSMprops::SpatCVranger(sp = pts.extcc, fm = formulaStringRF, train.params = trn.params,
-                                      rast = img10kf, nfolds = 10, nthreads = 50, resol = 10, os = "linux") # 6min
-  pts.s10cv$valtype <- "s10cv10f"
-
-  pts.s100cv <- DSMprops::SpatCVranger(sp = pts.extcc, fm = formulaStringRF, train.params = trn.params,
-                                       rast = img10kf, nfolds = 10, nthreads = 50, resol = 100, os = "linux")
-  pts.s100cv$valtype <- "s100cv10f"
-
-  ## Combine CV tables and save in list as R object
-  # cv.lst <- list(pts.pcv,pts.s1cv,pts.s10cv,pts.s100cv)
-  # saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep="")) # takes forever...
-  cv.lst <- readRDS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
-
-
-  ## Validation metrics
-  valmets <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, varrange = varrange, prop = prop, depth = d)
-  write.table(valmets, paste(predfolder,"/CVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
-
-  # ## PCV statistics: all data
-  # cvp.RMSE = sqrt(mean((pts.extpcv$prop_t - pts.extpcv$pcvpred)^2, na.rm=TRUE))
-  # cvp.Rsquared = 1-var(pts.extpcv$prop_t - pts.extpcv$pcvpred, na.rm=TRUE)/var(pts.extpcv$prop_t, na.rm=TRUE)
-  # ## Back transformed: create pcvpred_bt even if not tranformed for cv.depth function: Using Duan's smearing estimator
-  # if(trans=="log10") {pts.extpcv$pcvpred_bt <- (10^(pts.extpcv$pcvpred) - 0.1)*(mean(10^(pts.extpcv$prop_t - pts.extpcv$trainpredsadj)))}
-  # if(trans=="log") {pts.extpcv$pcvpred_bt <- (exp(pts.extpcv$pcvpred) - 1)*(mean(exp(pts.extpcv$prop_t - pts.extpcv$trainpredsadj)))}
-  # if(trans=="sqrt") {pts.extpcv$pcvpred_bt <- ((pts.extpcv$pcvpred)^2)*(mean((pts.extpcv$prop_t - pts.extpcv$trainpredsadj)^2))}
-  # if(trans=="none") {pts.extpcv$pcvpred_bt <- pts.extpcv$pcvpred}
-  # ## Untransformed calcs
-  # cvp.RMSE_bt = sqrt(mean((pts.extpcv$prop - pts.extpcv$pcvpred_bt)^2, na.rm=TRUE))
-  # cvp.Rsquared_bt = 1-var(pts.extpcv$prop - pts.extpcv$pcvpred_bt, na.rm=TRUE)/var(pts.extpcv$prop, na.rm=TRUE)
-  # ## PCV stats for scd points
-  # pts.extpcv.scd <- subset(pts.extpcv, pts.extpcv$tid == "scd")
-  # cvp.RMSE.scd <- sqrt(mean((pts.extpcv.scd$prop_t - pts.extpcv.scd$pcvpred)^2, na.rm=TRUE))
-  # cvp.Rsquared.scd <- 1-var(pts.extpcv.scd$prop_t - pts.extpcv.scd$pcvpred, na.rm=TRUE)/var(pts.extpcv.scd$prop_t, na.rm=TRUE)
-  # # cvp.RMSE.scdc <- sqrt(mean((pts.extpcv.scd$prop_tc - pts.extpcv.scd$pcvpred)^2, na.rm=TRUE))
-  # # cvp.Rsquared.scdc <- 1-var(pts.extpcv.scd$prop_tc - pts.extpcv.scd$pcvpred, na.rm=TRUE)/var(pts.extpcv.scd$prop_t, na.rm=TRUE)
-  # ## PCV stats for scd points: backtransformed
-  # cvp.RMSE.scd_bt <- sqrt(mean((pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt)^2, na.rm=TRUE))
-  # cvp.Rsquared.scd_bt <- 1-var(pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt, na.rm=TRUE)/var(pts.extpcv.scd$prop, na.rm=TRUE)
-  # ## Number of SCD samples
-  # n_scd <- length(pts.extpcv.scd[,1])
-  # ## RPI
-  # ## Back transform low PI
-  # # TODO Not sure if smearing estimator should be used on PIs? Probably not since the linear
-  # # adjustment does not apply.
-  # if(trans=="log10") {pts.extpcv$pcvpredpre.025_bt <- 10^(pts.extpcv$pcvpredpre.025) - 0.1}
-  # if(trans=="log") {pts.extpcv$pcvpredpre.025_bt <- exp(pts.extpcv$pcvpredpre.025) - 1}
-  # if(trans=="sqrt") {pts.extpcv$pcvpredpre.025_bt <- (pts.extpcv$pcvpredpre.025)^2}
-  # if(trans=="none") {pts.extpcv$pcvpredpre.025_bt <- pts.extpcv$pcvpredpre.025}
-  # ## Back transform Upper PI
-  # if(trans=="log10") {pts.extpcv$pcvpredpre.975_bt <- 10^(pts.extpcv$pcvpredpre.975) - 0.1}
-  # if(trans=="log") {pts.extpcv$pcvpredpre.975_bt <- exp(pts.extpcv$pcvpredpre.975) - 1}
-  # if(trans=="sqrt") {pts.extpcv$pcvpredpre.975_bt <- (pts.extpcv$pcvpredpre.975)^2}
-  # if(trans=="none") {pts.extpcv$pcvpredpre.975_bt <- pts.extpcv$pcvpredpre.975}
-  # ## Calculate different metrics
-  # pts.extpcv$abs.resid <- abs(pts.extpcv$prop - pts.extpcv$pcvpred_bt)
-  # pts.extpcv$RPI <- (pts.extpcv$pcvpredpre.975_bt - pts.extpcv$pcvpredpre.025_bt)/varrange
-  # plot(pts.extpcv$abs.resid~pts.extpcv$RPI) # Quick look at relationship
-  # ## Summarize RPI and residuals
-  # ## Back transform original property to avoid bias in PICP
-  # if(trans=="log10") {pts.extpcv$prop_bt <- 10^(pts.extpcv$prop_t) - 0.1}
-  # if(trans=="log") {pts.extpcv$prop_bt <- exp(pts.extpcv$prop_t) - 1}
-  # if(trans=="sqrt") {pts.extpcv$prop_bt <- (pts.extpcv$prop_t)^2}
-  # if(trans=="none") {pts.extpcv$prop_bt <- pts.extpcv$prop_t}
-  # pts.extpcv$rel.abs.resid <- pts.extpcv$abs.resid/varrange
-  # RPI.cvave <- mean(pts.extpcv$RPI)
-  # RPI.cvmed <- median(pts.extpcv$RPI)
-  # rel.abs.res.ave <- mean(pts.extpcv$rel.abs.resid)
-  # rel.abs.res.med <- median(pts.extpcv$rel.abs.resid)
-  # pts.extpcv$BTbias <- pts.extpcv$prop_bt - pts.extpcv$prop
-  # BTbias.abs.max <- max(abs(pts.extpcv$BTbias))
-  # BTbias.ave <- mean(pts.extpcv$BTbias)
-  # PICP <- sum(ifelse(pts.extpcv$prop_bt <= pts.extpcv$pcvpredpre.975_bt & pts.extpcv$prop_bt >= pts.extpcv$pcvpredpre.025_bt,1,0))/length(pts.extpcv[,1])
-  # ## Create PCV table
-  # CVdf <- data.frame(cvp.RMSE, cvp.Rsquared, cvp.RMSE_bt, cvp.Rsquared_bt, cvp.RMSE.scd, cvp.Rsquared.scd,  cvp.RMSE.scd_bt, cvp.Rsquared.scd_bt,n_scd,RPI.cvave,RPI.cvmed,PICP,rel.abs.res.ave,rel.abs.res.med,BTbias.abs.max,BTbias.ave)
-  # names(CVdf) <- c("cvp.RMSE","cvp.Rsquared","cvp.RMSE_bt", "cvp.Rsquared_bt", "cvp.RMSE.scd", "cvp.Rsquared.scd", "cvp.RMSE.scd_bt", "cvp.Rsquared.scd_bt","n_scd","RPI.CVave","RPI.CVmed","PICP","rel.abs.res.ave","rel.abs.res.med","BTbias.abs.max","BTbias.ave")
-  # write.table(CVdf, paste(predfolder,"/PCVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
-
-  ## Save Cross validation graph and data for future plotting
-  saveRDS(pts.extpcv, paste(predfolder,"/cvlm_preds_2D_",prop, "_", d, "_cm_nasisSSURGO_SG100.rds", sep=""))
-
-  ###### Cross validation plots
-  ## All data
-  viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
-  gplt.dcm.2D.CV <- ggplot(data=pts.extpcv, aes(prop_t, pcvpred)) +
-    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
-    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
-    xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri)) +
-    ggtitle(paste("Cross val", prop, d, "cm",sep=" "))
-  gplt.dcm.2D.CV
-  ggsave(paste(predfolder,'/ValPlot_1to1_all_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
-  ## Now just SCD pedons
-  gplt.dcm.2D.CV.SCD <- ggplot(data=pts.extpcv.scd, aes(prop_t, pcvpred)) +
-    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1)  + #xlim(-5,105) + ylim(-5,105) +
-    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
-    xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri)) +
-    ggtitle(paste("Cross val", prop, d, "cm",sep=" "))
-  gplt.dcm.2D.CV.SCD
-  ggsave(paste(predfolder,'/ValPlot_1to1_scd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.SCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
 
 
   ############################## Raster Preditions ######################################################
@@ -495,112 +464,6 @@ for(d in depths){
   ## Close out raster cluster
   endCluster()
 }
-
-
-################### Manual Cross validation ################################
-# pts.extcvm <- pts.extcc
-# nfolds <- 10
-# pts.extcvm$folds <- sample.int(nfolds,size =length(pts.extcvm[,1]),replace=T)
-# pts.extcvm$prop_t <- pts.extcvm$prop ## UPDATE: tranform if needed else just create new version of prop
-# formulaStringCVm <- as.formula(paste('prop_t ~', paste(gsub(".tif","", cov.grids), collapse="+")))
-# #for (g in seq(nfolds)){
-# CV_factorRF <- function(g,pts.extcvm, formulaStringCVm){
-#   traindf <- subset(pts.extcvm, pts.extcvm$folds != g)
-#   testdf <- subset(pts.extcvm, pts.extcvm$folds == g)
-#   xtrain.t <- as.matrix(traindf[c(gsub(".tif","", cov.grids))])
-#   ytrain.t <- c(as.matrix(traindf$prop_t))
-#   rf.pcv <- quantregForest(x=xtrain.t, y=ytrain.t, importance=TRUE, ntree=100, keep.forest=TRUE)
-#   rf.pcvc <- rf.pcv
-#   class(rf.pcvc) <- "randomForest"
-#   traindf$pcvpredpre <- predict(rf.pcvc, newdata=traindf)
-#   testdf$pcvpredpre <- predict(rf.pcvc, newdata=testdf)
-#   #traindf$pcvpredpre <- predict(rf.pcv, newdata=traindf, what=c(0.5)) ## If median is desired
-#   #testdf$pcvpredpre <- predict(rf.pcv, newdata=testdf,, what=c(0.5)) ## If median is desired
-#   testdf$pcvpredpre.025 <- predict(rf.pcv, newdata=testdf, what=c(0.025))
-#   testdf$pcvpredpre.975 <- predict(rf.pcv, newdata=testdf, what=c(0.975))
-#   attach(traindf)
-#   lm.pcv <- lm(prop_t~pcvpredpre)
-#   detach(traindf)
-#   testdf$pcvpred <- predict(lm.pcv, newdata=testdf)
-#   return(testdf)
-# }
-# snowfall::sfInit(parallel=TRUE, cpus=nfolds)
-# snowfall::sfExport("pts.extcvm","formulaStringCVm","CV_factorRF","cov.grids")
-# snowfall::sfLibrary(randomForest)
-# snowfall::sfLibrary(quantregForest)
-# pts.extpcv <- snowfall::sfLapply(1:nfolds, function(g){CV_factorRF(g, pts.extcvm=pts.extcvm,formulaStringCVm=formulaStringCVm)})
-# snowfall::sfStop()
-# pts.extpcv <- plyr::rbind.fill(pts.extpcv)
-# pts.extpcv$pcvpred = as.numeric(pts.extpcv$pcvpred)
-
-## Validate with lab pedons
-# scd.pts.d <- subset(scd.pts, as.numeric(scd.pts$hzn_top) <= d & as.numeric(scd.pts$hzn_bot) > d)
-# scd.pts.d <- spTransform(scd.pts.d, projection(pred))
-# pts.extpcv <- extract(pred, scd.pts.d, df=TRUE, sp=T)
-# #pts.extpcv@data$prop_t <- log10(pts.extpcv@data$ec_satp + 0.1)
-# pts.extpcv@data$prop <- pts.extpcv@data$ec_satp
-# pts.extpcv@data$pcvpred <- pts.extpcv@data$layer
-# #pts.extpcv@data$pcvpred <- log10(pts.extpcv@data$layer + 0.1)
-# ## PCV statistics
-# cvp.RMSE = sqrt(mean((pts.extpcv@data$prop_t - pts.extpcv@data$pcvpred)^2, na.rm=TRUE))
-# cvp.Rsquared = 1-var(pts.extpcv@data$prop_t - pts.extpcv@data$pcvpred, na.rm=TRUE)/var(pts.extpcv@data$prop_t, na.rm=TRUE)
-# ## Back transformed: create pcvpred_bt even if not tranformed for cv.depth function
-# #pts.extpcv@data$pcvpred_bt <- pts.extpcv@data$pcvpred
-# cvp.RMSE_bt = sqrt(mean((pts.extpcv@data$prop - pts.extpcv@data$pcvpred)^2, na.rm=TRUE))
-# cvp.Rsquared_bt = 1-var(pts.extpcv@data$prop - pts.extpcv@data$pcvpred, na.rm=TRUE)/var(pts.extpcv@data$prop, na.rm=TRUE)
-# ## PCV stats for scd points
-# # pts.extpcv.scd <- subset(pts.extpcv, pts.extpcv$tid == "scd")
-# # cvp.RMSE.scd <- sqrt(mean((pts.extpcv.scd$prop_t - pts.extpcv.scd$pcvpred)^2, na.rm=TRUE))
-# # cvp.Rsquared.scd <- 1-var(pts.extpcv.scd$prop_t - pts.extpcv.scd$pcvpred, na.rm=TRUE)/var(pts.extpcv.scd$prop_t, na.rm=TRUE)
-# # ## PCV stats for scd points: backtransformed
-# # cvp.RMSE.scd_bt <- sqrt(mean((pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt)^2, na.rm=TRUE))
-# # cvp.Rsquared.scd_bt <- 1-var(pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt, na.rm=TRUE)/var(pts.extpcv.scd$prop, na.rm=TRUE)
-# # ## Number of SCD samples
-# # n_scd <- length(pts.extpcv.scd[,1])
-# # ## RPI
-# # pts.extpcv$prop_bt <- pts.extpcv$prop_t # UPDATE: backtransform if necessary. Used for PICP and to characterize backtransformation bias
-# # pts.extpcv$pcvpredpre.025_bt <- pts.extpcv$pcvpredpre.025 # UPDATE: backtransform if necessary
-# # pts.extpcv$pcvpredpre.975_bt <- pts.extpcv$pcvpredpre.975 # UPDATE: backtransform if necessary
-# # pts.extpcv$abs.resid <- abs(pts.extpcv$prop - pts.extpcv$pcvpred_bt)
-# # pts.extpcv$RPI <- (pts.extpcv$pcvpredpre.975_bt - pts.extpcv$pcvpredpre.025_bt)/varrange
-# # plot(pts.extpcv$abs.resid~pts.extpcv$RPI) # Quick look at relationship
-# ## Summarize RPI and residuals
-# # pts.extpcv$rel.abs.resid <- pts.extpcv$abs.resid/varrange
-# # RPI.cvave <- mean(pts.extpcv$RPI)
-# # RPI.cvmed <- median(pts.extpcv$RPI)
-# # rel.abs.res.ave <- mean(pts.extpcv$rel.abs.resid)
-# # rel.abs.res.med <- median(pts.extpcv$rel.abs.resid)
-# # pts.extpcv$BTbias <- pts.extpcv$prop_bt - pts.extpcv$prop
-# # BTbias.abs.max <- max(abs(pts.extpcv$BTbias))
-# # BTbias.ave <- mean(pts.extpcv$BTbias)
-# # PICP <- sum(ifelse(pts.extpcv$prop_bt <= pts.extpcv$pcvpredpre.975_bt & pts.extpcv$prop_bt >= pts.extpcv$pcvpredpre.025_bt,1,0))/length(pts.extpcv[,1])
-# # ## Create PCV table
-# # CVdf <- data.frame(cvp.RMSE, cvp.Rsquared, cvp.RMSE_bt, cvp.Rsquared_bt, cvp.RMSE.scd, cvp.Rsquared.scd, cvp.RMSE.scd_bt, cvp.Rsquared.scd_bt,n_scd,RPI.cvave,RPI.cvmed,PICP,rel.abs.res.ave,rel.abs.res.med,BTbias.abs.max,BTbias.ave)
-# # names(CVdf) <- c("cvp.RMSE","cvp.Rsquared","cvp.RMSE_bt", "cvp.Rsquared_bt", "cvp.RMSE.scd", "cvp.Rsquared.scd", "cvp.RMSE.scd_bt", "cvp.Rsquared.scd_bt","n_scd","RPI.CVave","RPI.CVmed","PICP","rel.abs.res.ave","rel.abs.res.med","BTbias.abs.max","BTbias.ave")
-# # setwd(predfolder)
-# # write.table(CVdf, paste("PCVstats", prop, d, "cm_nasisSSURGO_ART_SG100.txt",sep="_"), sep = "\t", row.names = FALSE)
-# CVdf <- data.frame(cvp.RMSE, cvp.Rsquared)
-# names(CVdf) <- c("cvp.RMSE","cvp.Rsquared")
-# #setwd(predfolder)
-# write.table(CVdf, paste(predfolder,"/PCVstats_", prop, "_", d, "_cm_nasisSSURGO_ART_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
-# # plot(pts.extpcv$prop~pts.extpcv$pcvpred_bt)
-# # plot(pts.extpcv$prop~pts.extpcv$pcvpred_bt, xlim=c(0,10),ylim=c(0,10))
-# # plot(pts.extpcv$prop~pts.extpcv$pcvpred_bt, xlim=c(0,5),ylim=c(0,5))
-# # plot(pts.extpcv$prop~pts.extpcv$pcvpred_bt, xlim=c(0,1),ylim=c(0,1))
-# # plot(pts.extpcv$prop_t~pts.extpcv$pcvpred)
-# #lines(x1,y1, col = 'red')#1:1 line
-# # CV plots
-# viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
-# gplt.dcm.2D.CV <- ggplot(data=pts.extpcv@data, aes(prop, pcvpred)) +
-#   stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1)  + xlim(-5,105) + ylim(-5,105) +
-#   theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
-#   xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri)) +
-#   ggtitle(paste("Cross val", prop, d, "cm",sep=" "))
-# gplt.dcm.2D.CV
-# ggsave(paste(predfolder,'/ValPlot_1to1_scd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
-# ## Save Cross validation graph and data for future plotting
-# saveRDS(pts.extpcv, paste(prop, "cvlm_preds_2D", d, "cm_nasisSSURGO_ART_SG100.rds", sep="_"))
-
 
 
 ############# Masking water pixels out ############

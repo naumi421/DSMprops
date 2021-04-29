@@ -44,7 +44,7 @@ SpatCVranger <- function(sp, nfolds = 10, fm, rast, resol, os = "windows", train
 
   ## Linux CV function implementation in forked parallel list apply
   if(os == "linux"){
-    fnthreads <- ifelse(nthreads > nfolds, (nthreads - nfolds), 1)
+    fnthreads <- ifelse(nthreads > nfolds, floor((nthreads - nfolds)/nfolds), 1)
     lappthreads <- ifelse(nthreads >= nfolds, nfolds, nthreads)
     CV_factorRF <- function(g){#,pts.extcvm, formulaStringCVm){
       traindf <- subset(pts.extcvm, pts.extcvm$folds != g)
@@ -77,7 +77,7 @@ SpatCVranger <- function(sp, nfolds = 10, fm, rast, resol, os = "windows", train
     CV_factorRF <- function(g){
       traindf <- subset(pts.extcvm, pts.extcvm$folds != g)
       testdf <- subset(pts.extcvm, pts.extcvm$folds == g)
-      rf.pcv <- ranger(formulaStringRF, data=traindf, num.trees = train.params$ntrees, quantreg = T, num.threads = fnthreads,
+      rf.pcv <- ranger(formulaStringRF, data=traindf, num.trees = train.params$ntrees, quantreg = T, num.threads = nthreads,
                        min.node.size = train.params$min.node.size,case.weights = traindf$tot_wts)
       traindf$pcvpredpre <- predict(rf.pcv,data=traindf, num.threads = nthreads)$predictions
       testdf$pcvpredpre <- predict(rf.pcv, data=testdf, num.threads = nthreads)$predictions

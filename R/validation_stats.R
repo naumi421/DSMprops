@@ -83,6 +83,7 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     PICP <- sum(ifelse(pts.extpcv$prop_bt <= pts.extpcv$pcvpredpre.975_bt & pts.extpcv$prop_bt >= pts.extpcv$pcvpredpre.025_bt,1,0))/length(pts.extpcv[,1])
     ## Create CV statistics table
     CVdf <- data.frame(model, valtype, n, RMSE, Rsq, Rsqpre, Bias, RMSE_bt, Rsq_bt, MAE_bt, MedAE_bt, Bias_bt, RMSE.scd, Rsq.scd, RMSE.scd_bt, Rsq.scd_bt, MAE.scd_bt, MedAE.scd_bt, Bias.scd_bt, n_scd,RPI.cvave,RPI.cvmed,PICP,rel.abs.res.ave,rel.abs.res.med,BTbias.abs.max,BTbias.ave)
+    if("cvgrid" %in% colnames(pts.extpcv)){CVdf$cvgrid <- pts.extpcv$cvgrid[1]}
     return(CVdf)
   }
 
