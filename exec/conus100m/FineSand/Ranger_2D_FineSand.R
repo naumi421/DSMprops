@@ -10,7 +10,7 @@
 # Workspace setup
 # Install packages if not already installed
 required.packages <- c("raster", "sp", "rgdal", "ranger", "snow", "snowfall", "dplyr", "ggplot2",
-                       "hexbin","doParallel","aqp","Hmisc","spatstat","maptools","DSMprops","RSQLite")
+                       "hexbin","doParallel","aqp","Hmisc","spatstat","maptools","DSMprops","RSQLite","lubridate","stringr")
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
@@ -26,11 +26,16 @@ covfolder <- "/push/SG100_covars"
 ptsfolder <- "/push/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
 
 ######## Load soil profile collection ##############
+## Geographic coordinate quality levels
+pts_geocode <- readRDS("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/geocode_weighting.RDS") # From Dave White
+pts_geocode$geo_wt <- pts_geocode$wt
+pts_geocode$wt <- NULL
+pts_geocode$peiid <- as.character(pts_geocode$peiid)
+## Pedons with extracted SSUGO component data
 pts <- readRDS(paste(ptsfolder,"/NASIS_all_component_horizon_match_SPC_ssurgo20.rds",sep=""))
 pts.proj <- proj4string(pts)
 shp.pts <- pts@site
 coordinates(shp.pts) <- ~ x_std + y_std
-shp.pts <- as(pts,'SpatialPointsDataFrame')
 projection(shp.pts) <- pts.proj
 shp.pts@data <- shp.pts@data[,c("peiid","mtchtype","compname")]
 
@@ -60,6 +65,8 @@ shp.pts <- shp.pts[polybound,]
 # saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_SSURGO_SG100_covarsc.rds",sep=""))
 ## Updated extract for CONUS
 pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_SSURGO_SG100_covarsc.rds",sep=""))
+pts.ext <- left_join(pts.ext, pts_geocode, by = "peiid")
+pts.ext$geo_wt <- ifelse(is.na(pts.ext$geo_wt),8,pts.ext$geo_wt) # 18.8k NAs put in class 8
 
 ## Weed out duplicates
 pts.ext$locid <- paste(pts.ext$x_std,pts.ext$y_std,sep="_")
@@ -115,6 +122,14 @@ scd.pts <- scd.pts[polybound,]
 # ## Save scd pts with extraction
 # saveRDS(scd.pts.ext, paste(predfolder,"/SCD_PSD","_extracted_nasisSSURGO_SG100.rds",sep=""))
 scd.pts.ext <- readRDS(paste(predfolder,"/SCD_PSD","_extracted_nasisSSURGO_SG100.rds",sep=""))
+## Create geo-coordinate quality weights
+scd.pts.ext$date <- as.Date(scd.pts.ext$site_obsdate, format = "%m/%d/%Y")
+scd.pts.ext$decdate <- lubridate::decimal_date(scd.pts.ext$date)
+scd.pts.ext$peiid <- as.character(scd.pts.ext$siteiid)
+scd.pts.ext <- left_join(scd.pts.ext, pts_geocode, by="peiid")
+scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt) & scd.pts.ext$date >= "2010-01-01", 6, scd.pts.ext$geo_wt)
+scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt) & scd.pts.ext$date >= "2005-01-01", 7, scd.pts.ext$geo_wt)
+scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt), 8, scd.pts.ext$geo_wt) ## Awful lot of class 8s...
 
 ## Now join scd.hor to scd.pts and get rid of any duplicates
 scd.pts.ext.hor <- inner_join(scd.hor,scd.pts.ext, by="site_key")
@@ -155,7 +170,7 @@ for(d in depths){
   # pedonLocations <- unique(pts.extc$LocID) # if length differs from # of rows in pts, there are duplicates
   # pts.extc <- subset(pts.extc, !duplicated(pts.extc[c("LocID")])) #removes duplicates
   ptspred.list <- gsub(".tif","", cov.grids.names)# Take .tif off of the grid list to just get the variable names
-  ptspred.list <- c(ptspred.list,"prop","mtchtype","peiid","tid","x_std","y_std") #Add dependent variable
+  ptspred.list <- c(ptspred.list,"prop","mtchtype","peiid","tid","x_std","y_std","geo_wt","locid") #Add dependent variable
   pts.extcc <- pts.extc[,c(ptspred.list)]## Or create a specific list of dependent variable and covariate names to use
   pts.extcc <- na.omit(pts.extcc)# Remove any record with NA's (in any column - be careful)
   ### Check for duplication with lab pedons
@@ -164,7 +179,6 @@ for(d in depths){
   scd.pts.d <- scd.pts.d[!duplicated(scd.pts.d$locid),]
   scd.pts.d$x_std <- scd.pts.d$longitude_decima
   scd.pts.d$y_std <- scd.pts.d$latitude_decimal
-  scd.pts.d$peiid <- scd.pts.d$locid
   scd.pts.d$mtchtype <- "scd"
   scd.pts.d$tid <- "scd"
   ## Check for duplicated pedons betweeen NASIS and SCD using buffers
@@ -201,9 +215,14 @@ for(d in depths){
   ## Create spatial density based weights: better way to do this??
   pts.extcc@data$sp_wts <- 1-(pts.extcc@data$ptspercell / (max(pts.extcc@data$ptspercell)*1.1))
   ## Data quality weights
-  pts.extcc@data$qual_wts <- ifelse(pts.extcc@data$tid == "scd", 1.0,0.5)
+  #pts.extcc@data$qual_wts <- ifelse(pts.extcc@data$tid == "scd", 1.0,0.5)
+  pts.extcc@data$qual_wts <- 1
   ## Combined sample weights: better way to do?
   pts.extcc@data$tot_wts <- pts.extcc@data$sp_wts * pts.extcc@data$qual_wts
+  ## Geocode classes
+  pts.extcc@data <- dplyr::mutate(pts.extcc@data, geo_cls = ifelse(geo_wt<7,"gps",NA),
+                                  geo_cls = ifelse(geo_wt==7,"oldgps",geo_cls),
+                                  geo_cls = ifelse(geo_wt==8,"unk",geo_cls))
   ## Apply transformation
   if(trans=="log10") {pts.extcc$prop_t <- log10(pts.extcc$prop + 0.1)}
   if(trans=="log") {pts.extcc$prop_t <- log(pts.extcc$prop + 1)}
@@ -223,6 +242,55 @@ for(d in depths){
   ## TODO ? model tuning step for mtry, min node size, ntrees, other params???
   ## Set training parameters
   trn.params <- list(ntrees = 100, min.node.size = 1)
+
+  ## Now prepare a case.weights grid search using the chosen cross validation approach
+  #qual_vec <- c("full","mid","none")
+  #sp_vec <- c("full","mid","none")
+  geo_vec <- c("gps","gps_oldgps","gps_oldgps_unk")
+  srce_vec <- c("scd","scd_direct","scd_direct_home","scd_direct_home_adjacent")
+  #geo_vec <-  lapply(1:length(unique(pts.extcc@data$geo_cls)),function(x){combn(unique(pts.extcc@data$geo_cls),x,simplify=T)})
+  grid_vec <- expand.grid(geo=geo_vec, srce=srce_vec, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
+  #grid_vec <- expand.grid(qual=qual_vec, spat=sp_vec, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
+  CV_grid_fn <- function(x){
+    levs <- grid_vec[x,]
+    geo_levs <- str_split(levs$geo, "_")[[1]]
+    srce_levs <- str_split(levs$srce, "_")[[1]]
+    ptseval <- pts.extcc
+    ptseval <- ptseval[ptseval@data$geo_cls %in% geo_levs,]
+    ptseval <- ptseval[ptseval@data$mtchtype %in% srce_levs,]
+    # if(levs$qual == "mid"){ptseval@data$qual_wts <- sqrt(ptseval@data$qual_wts)}
+    # if(levs$qual == "none"){ptseval@data$qual_wts <- 1}
+    # if(levs$spat == "mid"){ptseval@data$sp_wts <- sqrt(ptseval@data$sp_wts)}
+    # if(levs$spat == "none"){ptseval@data$sp_wts <- 1}
+    nfolds <- 5
+    resol <- 10 # kilometers
+    ptseval@data$tot_wts <- ptseval@data$qual_wts * ptseval@data$sp_wts
+    ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
+                                        rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux")
+    ptsevalcv$cvgrid <- paste(colnames(levs),levs[1,],collapse="_",sep="_")
+    ptsevalcv$valtype <- paste("s",resol,"cv",nfolds,"f",sep="")
+    return(ptsevalcv)
+  }
+  ## List apply implementation
+  Sys.time()
+  CV_grid_lst <- lapply(1:nrow(grid_vec),CV_grid_fn)
+  Sys.time()
+  saveRDS(CV_grid_lst,paste(predfolder,"/CV_grid_list_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
+  ## Validation metrics for CVs with different case weighting schemes
+  Grid_valmets <- DSMprops::valmetrics(xlst = CV_grid_lst, trans = trans, varrange = varrange, prop = prop, depth = d)
+  write.table(Grid_valmets, paste(predfolder,"/Grid_CVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
+
+  ## Now pick model mode ranking on multiple criteria
+  Grid_valmets$RPI.cvave.rnk <- rank(Grid_valmets$RPI.cvave,ties.method = "average")
+  Grid_valmets$RMSE.scd_bt.rnk <- rank(Grid_valmets$RMSE.scd_bt,ties.method = "average")
+  Grid_valmets$MedAE.scd_bt.rnk <- rank(Grid_valmets$MedAE.scd_bt,ties.method = "average")
+  Grid_valmets$Rsq.rnk <- (nrow(Grid_valmets)+1) - rank(Grid_valmets$Rsq,ties.method = "average")
+  Grid_valmets$tot_rank <- apply(Grid_valmets[,c("RPI.cvave.rnk","RMSE.scd_bt.rnk","MedAE.scd_bt.rnk","Rsq.rnk")], MARGIN = 1, FUN=mean)
+  model_params <- str_split(Grid_valmets[Grid_valmets$tot_rank==min(Grid_valmets$tot_rank),c("cvgrid")][1],"_")[[1]]
+  #model_params <- str_split(model_params,"_")[[1]]
+  srce_params <- model_params[(match("srce",model_params)+1):length(model_params)]
+  geo_params <- model_params[(match("geo",model_params)+1):(match("srce",model_params)-1)]
+
 
   ## Normal 10-fold cross validation
   pts.pcv <- DSMprops::CVranger(x = pts.extcc@data, fm = formulaStringRF, train.params = trn.params,
@@ -249,32 +317,6 @@ for(d in depths){
   ## Validation metrics for CVs at different spatial supports
   valmets <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, varrange = varrange, prop = prop, depth = d)
   write.table(valmets, paste(predfolder,"/CVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
-
-  ## Now prepare a case.weights grid search using the chosen cross validation approach
-  qual_wts <- c("full","mid","none")
-  sp_wts <- c("full","mid","none")
-  wt_grid <- expand.grid(qual=qual_wts, spat=sp_wghts, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
-  CV_wt_grid_fn <- function(x){
-    levs <- wt_grid[x,]
-    ptseval <- pts.extcc
-    if(levs$qual == "mid"){ptseval@data$qual_wts <- sqrt(ptseval@data$qual_wts)}
-    if(levs$qual == "none"){ptseval@data$qual_wts <- 1}
-    if(levs$spat == "mid"){ptseval@data$sp_wts <- sqrt(ptseval@data$sp_wts)}
-    if(levs$spat == "none"){ptseval@data$sp_wts <- 1}
-    ptseval@data$tot_wts <- ptseval@data$qual_wts * ptseval@data$sp_wts
-    ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
-                                        rast = img10kf, nfolds = 10, nthreads = 60, resol = 10, os = "linux")
-    ptsevalcv$cvgrid <- paste(colnames(levs),levs[1,],collapse="_",sep="_")
-    ptsevalcv$valtype <- "s10cv10f"
-    return(ptsevalcv)
-  }
-  ## List apply implementation
-  Sys.time()
-  CV_wtgrid_lst <- lapply(1:nrow(wt_grid),CV_wt_grid_fn)
-  Sys.time()
-  ## Validation metrics for CVs with different case weighting schemes
-  WtGrid_valmets <- DSMprops::valmetrics(xlst = CV_wtgrid_lst, trans = trans, varrange = varrange, prop = prop, depth = d)
-  write.table(WtGrid_valmets, paste(predfolder,"/WtGrid_CVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
 
 
   ###### Cross validation plots
