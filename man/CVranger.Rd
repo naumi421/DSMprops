@@ -10,7 +10,8 @@ CVranger(
   fm,
   os = "windows",
   train.params,
-  nthreads = detectCores() - 1
+  nthreads = detectCores() - 1,
+  casewts = "tot_wts"
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ CVranger(
 \item{train.params}{List of training parameters for building random forest models.}
 
 \item{nthreads}{Integer number of logical cores to use for parallelization of function.}
+
+\item{casewts}{Character name of field with case weights values}
 }
 \value{
 data.frame with original fields along with CV predictions

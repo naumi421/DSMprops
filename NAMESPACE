@@ -2,5 +2,6 @@
 
 export(CVranger)
 export(SpatCVranger)
+export(feat_wts)
 export(parPTextr)
 export(valmetrics)

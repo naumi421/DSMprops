@@ -21,6 +21,7 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     pts.extpcv <- xlst[[v]]
     model <- paste(prop,depth,"cm",sep="_")
     valtype <- pts.extpcv$valtype[1]
+    varrange <- as.numeric(quantile(pts.extpcv$prop, probs=c(0.975), na.rm=T)-quantile(pts.extpcv$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
     ## CV statistics: all data
     n <- length(pts.extpcv[,1])
     RMSE <- sqrt(mean((pts.extpcv$prop_t - pts.extpcv$pcvpred)^2, na.rm=TRUE))
