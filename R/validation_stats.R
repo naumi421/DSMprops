@@ -21,7 +21,8 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     pts.extpcv <- xlst[[v]]
     model <- paste(prop,depth,"cm",sep="_")
     valtype <- pts.extpcv$valtype[1]
-    varrange <- as.numeric(quantile(pts.extpcv$prop, probs=c(0.975), na.rm=T)-quantile(pts.extpcv$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
+    varrange <- as.numeric(quantile(pts.extpcv$prop, probs=c(0.975), na.rm=T)-quantile(pts.extpcv$prop, probs=c(0.025),na.rm=T))
+    qrtrange <- as.numeric(quantile(pts.extpcv$prop, probs=c(0.75), na.rm=T)-quantile(pts.extpcv$prop, probs=c(0.25),na.rm=T))
     ## CV statistics: all data
     n <- length(pts.extpcv[,1])
     RMSE <- sqrt(mean((pts.extpcv$prop_t - pts.extpcv$pcvpred)^2, na.rm=TRUE))
@@ -39,18 +40,8 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     MAE_bt <- mean(abs(pts.extpcv$prop - pts.extpcv$pcvpred_bt), na.rm=TRUE) # Mean Absolute Accuracy
     MedAE_bt <- median(abs(pts.extpcv$prop - pts.extpcv$pcvpred_bt), na.rm=TRUE) # Median Absolute Accuracy
     Bias_bt <- mean(pts.extpcv$prop - pts.extpcv$pcvpred_bt, na.rm=TRUE)/mean(pts.extpcv$prop_t, na.rm=T)
-    ## PCV stats for scd points
-    pts.extpcv.scd <- subset(pts.extpcv, pts.extpcv$tid == "scd")
-    RMSE.scd <- sqrt(mean((pts.extpcv.scd$prop_t - pts.extpcv.scd$pcvpred)^2, na.rm=TRUE))
-    Rsq.scd <- 1-var(pts.extpcv.scd$prop_t - pts.extpcv.scd$pcvpred, na.rm=TRUE)/var(pts.extpcv.scd$prop_t, na.rm=TRUE)
-    ## PCV stats for scd points: backtransformed
-    RMSE.scd_bt <- sqrt(mean((pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt)^2, na.rm=TRUE))
-    Rsq.scd_bt <- 1-var(pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt, na.rm=TRUE)/var(pts.extpcv.scd$prop, na.rm=TRUE)
-    MAE.scd_bt <- mean(abs(pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt), na.rm=TRUE) # Mean Absolute Accuracy
-    MedAE.scd_bt <- median(abs(pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt), na.rm=TRUE) # Median Absolute Accuracy
-    Bias.scd_bt <- mean(pts.extpcv.scd$prop - pts.extpcv.scd$pcvpred_bt, na.rm=TRUE)/mean(pts.extpcv.scd$prop_t, na.rm=T)
-    ## Number of SCD samples
-    n_scd <- length(pts.extpcv.scd[,1])
+    QRMSE_bt <- qrtrange / sqrt(mean((pts.extpcv$prop - pts.extpcv$pcvpred_bt)^2, na.rm=TRUE))
+    QMedAE_bt <- qrtrange / median(abs(pts.extpcv$prop - pts.extpcv$pcvpred_bt), na.rm=TRUE)
     ## RPI
     ## Back transform low PI
     # TODO Not sure if smearing estimator should be used on PIs? Probably not since the linear
@@ -73,17 +64,11 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     if(trans=="log") {pts.extpcv$prop_bt <- exp(pts.extpcv$prop_t) - 1}
     if(trans=="sqrt") {pts.extpcv$prop_bt <- (pts.extpcv$prop_t)^2}
     if(trans=="none") {pts.extpcv$prop_bt <- pts.extpcv$prop_t}
-    pts.extpcv$rel.abs.resid <- pts.extpcv$abs.resid/varrange
     RPI.cvave <- mean(pts.extpcv$RPI)
     RPI.cvmed <- median(pts.extpcv$RPI)
-    rel.abs.res.ave <- mean(pts.extpcv$rel.abs.resid)
-    rel.abs.res.med <- median(pts.extpcv$rel.abs.resid)
-    pts.extpcv$BTbias <- pts.extpcv$prop_bt - pts.extpcv$prop
-    BTbias.abs.max <- max(abs(pts.extpcv$BTbias))
-    BTbias.ave <- mean(pts.extpcv$BTbias)
     PICP <- sum(ifelse(pts.extpcv$prop_bt <= pts.extpcv$pcvpredpre.975_bt & pts.extpcv$prop_bt >= pts.extpcv$pcvpredpre.025_bt,1,0))/length(pts.extpcv[,1])
     ## Create CV statistics table
-    CVdf <- data.frame(model, valtype, n, RMSE, Rsq, Rsqpre, Bias, RMSE_bt, Rsq_bt, MAE_bt, MedAE_bt, Bias_bt, RMSE.scd, Rsq.scd, RMSE.scd_bt, Rsq.scd_bt, MAE.scd_bt, MedAE.scd_bt, Bias.scd_bt, n_scd,RPI.cvave,RPI.cvmed,PICP,rel.abs.res.ave,rel.abs.res.med,BTbias.abs.max,BTbias.ave)
+    CVdf <- data.frame(model, valtype, n, RMSE, Rsq, Rsqpre, Bias, RMSE_bt, Rsq_bt, MAE_bt, MedAE_bt, Bias_bt, QRMSE_bt, QMedAE_bt, RPI.cvave,RPI.cvmed,PICP)
     if("cvgrid" %in% colnames(pts.extpcv)){CVdf$cvgrid <- pts.extpcv$cvgrid[1]}
     return(CVdf)
   }

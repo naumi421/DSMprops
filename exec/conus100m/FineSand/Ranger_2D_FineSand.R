@@ -74,9 +74,9 @@ n.pts <- n.pts[polybound,]
 # rasterOptions(maxmemory = 4e+09)
 # pts.ext <- DSMprops::parPTextr(sp = n.pts, gridlist = cov.grids, os = "linux",nthreads = 50)
 # ## Save points
-# saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_SSURGO_SG100_covarsc.rds",sep=""))
+# saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_extracted.rds",sep=""))
 ## Updated extract for CONUS
-pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_SSURGO_SG100_covarsc.rds",sep=""))
+pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_extracted.rds",sep=""))
 pts.ext <- left_join(pts.ext, pts_geocode, by = "peiid")
 pts.ext$geo_wt <- ifelse(is.na(pts.ext$geo_wt),8,pts.ext$geo_wt) # 18.8k NAs put in class 8
 
@@ -135,8 +135,8 @@ scd.pts <- scd.pts[polybound,]
 ## Extract covariates for prediction onto SCD points
 # scd.pts.ext <- DSMprops::parPTextr(scd.pts, cov.grids, os = "linux", nthreads=50)
 # ## Save scd pts with extraction
-# saveRDS(scd.pts.ext, paste(predfolder,"/SCD_PSD","_extracted_nasisSSURGO_SG100.rds",sep=""))
-scd.pts.ext <- readRDS(paste(predfolder,"/SCD_PSD","_extracted_nasisSSURGO_SG100.rds",sep=""))
+# saveRDS(scd.pts.ext, paste(predfolder,"/SCD","_extracted.rds",sep=""))
+scd.pts.ext <- readRDS(paste(predfolder,"/SCD","_extracted.rds",sep=""))
 ## Create geo-coordinate quality weights
 scd.pts.ext$date <- as.Date(scd.pts.ext$site_obsdate, format = "%m/%d/%Y")
 scd.pts.ext$decdate <- lubridate::decimal_date(scd.pts.ext$date)
@@ -183,6 +183,7 @@ ft_wts_ref <- readRDS("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/20
 ##### Loop to train and predict properties for all depths
 depths <- c(0,5,15,30,60,100,150)
 for(d in depths){
+  pretime <- Sys.time()
   pts.extc <- subset(pts.ext.hor, as.numeric(pts.ext.hor$hzdept_r) <= d & as.numeric(pts.ext.hor$hzdepb_r) > d) # subset to chosen depth
   ptspred.list <- gsub(".tif","", cov.grids.names)# Take .tif off of the grid list to just get the variable names
   ptspred.list <- c(ptspred.list,"prop","mtchtype","peiid","tid","x_std","y_std","geo_wt","locid") #Add dependent variable
@@ -223,8 +224,8 @@ for(d in depths){
   if(trans=="sqrt") {pts.extcc$prop_t <- sqrt(pts.extcc$prop)}
   if(trans=="none") {pts.extcc$prop_t <- pts.extcc$prop}
   ## Save pts available for modeling file
-  saveRDS(pts.extcc, paste(predfolder,"/AvailPTS_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
-  pts.extcc <- readRDS(paste(predfolder,"/AvailPTS_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
+  saveRDS(pts.extcc, paste(predfolder,"/AvailPTS_", prop, '_',d, "_cm.rds",sep=""))
+  pts.extcc <- readRDS(paste(predfolder,"/AvailPTS_", prop, '_',d, "_cm.rds",sep=""))
   ## Set up RF formula
   formulaStringRF <- as.formula(paste('prop_t ~', paste(gsub(".tif","", cov.grids.names), collapse="+")))
 
@@ -256,20 +257,41 @@ for(d in depths){
   Sys.time()
   CV_grid_lst <- lapply(1:nrow(grid_vec),CV_grid_fn)
   Sys.time()
-  #saveRDS(CV_grid_lst,paste(predfolder,"/CV_grid_list_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep="")) # takes forever
+  #saveRDS(CV_grid_lst,paste(predfolder,"/CV_grid_list_", prop, '_',d, "_cm.rds",sep="")) # takes forever
+  ## Subset CVs to recent scd points
+  CV_grid_lst_scd_gps <- lapply(1:length(CV_grid_lst),function(x){
+    df <- CV_grid_lst[[x]]
+    df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"),]
+    return(df)
+  })
+  CV_grid_lst_scd_all <- lapply(1:length(CV_grid_lst),function(x){
+    df <- CV_grid_lst[[x]]
+    df <- df[df$mtchtype=="scd",]
+    return(df)
+  })
   ## Validation metrics for CVs with different case weighting schemes
   Grid_valmets <- DSMprops::valmetrics(xlst = CV_grid_lst, trans = trans, prop = prop, depth = d)
+  Grid_valmets_scd_gps <- DSMprops::valmetrics(xlst = CV_grid_lst_scd_gps, trans = trans, prop = prop, depth = d)
+  Grid_valmets_scd_all <- DSMprops::valmetrics(xlst = CV_grid_lst_scd_all, trans = trans, prop = prop, depth = d)
+  valmets_rank <- data.frame( cvgrid = Grid_valmets$cvgrid, Rsq.all = Grid_valmets$Rsq, RPI.all = Grid_valmets$RPI.cvave,
+                              Rsq.scd = Grid_valmets_scd_all$Rsq, Rsq.gscd = Grid_valmets_scd_gps$Rsq, QRMSE_bt.gscd = Grid_valmets$QRMSE_bt,
+                             QMedAE_bt.gscd = Grid_valmets_scd_gps$QMedAE_bt)
+  grid_valmets_lst <- list(Grid_valmets,Grid_valmets_scd_gps,Grid_valmets_scd_all,valmets_rank)
+  names(grid_valmets_lst) <- c("Grid_valmets","Grid_valmets_scd_gps","Grid_valmets_scd_all","valmets_rank")
+  saveRDS(grid_valmets_lst,paste(predfolder,"/CV_grid_valmets_", prop, '_',d, "_cm.rds",sep=""))
   ## Now pick model mode ranking on multiple criteria
-  Grid_valmets$RPI.cvave.rnk <- rank(Grid_valmets$RPI.cvave,ties.method = "average")
-  Grid_valmets$RMSE.scd_bt.rnk <- rank(Grid_valmets$RMSE.scd_bt,ties.method = "average")
-  Grid_valmets$MedAE.scd_bt.rnk <- rank(Grid_valmets$MedAE.scd_bt,ties.method = "average")
-  Grid_valmets$Rsq.scd.rnk <- (nrow(Grid_valmets)+1) - rank(Grid_valmets$Rsq.scd,ties.method = "average")
-  Grid_valmets$Rsq.rnk <- (nrow(Grid_valmets)+1) - rank(Grid_valmets$Rsq,ties.method = "average")
-  Grid_valmets$tot_rank <- apply(Grid_valmets[,c("RPI.cvave.rnk","RMSE.scd_bt.rnk","MedAE.scd_bt.rnk","Rsq.rnk","Rsq.scd.rnk")], MARGIN = 1, FUN=mean)
-  write.table(Grid_valmets, paste(predfolder,"/Grid_CVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
+  valmets_rank$RPI.cvave.rnk <- rank(valmets_rank$RPI.all,ties.method = "average")
+  valmets_rank$QRMSE_bt.gscd.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$QRMSE_bt.gscd,ties.method = "average")
+  valmets_rank$QMedAE_bt.gscd.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$QMedAE_bt.gscd,ties.method = "average")
+  valmets_rank$Rsq.scd.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$Rsq.scd,ties.method = "average")
+  valmets_rank$Rsq.gscd.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$Rsq.gscd,ties.method = "average")
+  valmets_rank$Rsq.all.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$Rsq.all,ties.method = "average")
+  valmets_rank$rank_ave <- apply(valmets_rank[,c("RPI.cvave.rnk","QRMSE_bt.gscd.rnk","QMedAE_bt.gscd.rnk",
+                                                 "Rsq.scd.rnk","Rsq.gscd.rnk","Rsq.all.rnk")], MARGIN = 1, FUN=mean)
+  valmets_rank$rank_final <- rank(valmets_rank$rank_ave,ties.method = "random")
+  write.table(valmets_rank, paste(predfolder,"/Grid_valmets_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
   ## Select points from overall dataset based on combined rankings
-  model_params <- str_split(Grid_valmets[Grid_valmets$tot_rank==min(Grid_valmets$tot_rank),c("cvgrid")][1],"_")[[1]]
-  #model_params <- str_split(model_params,"_")[[1]]
+  model_params <- str_split(valmets_rank[valmets_rank$rank_final==min(valmets_rank$rank_final),c("cvgrid")][1],"_")[[1]]
   srce_params <- model_params[(match("srce",model_params)+1):length(model_params)]
   geo_params <- model_params[(match("geo",model_params)+1):(match("srce",model_params)-1)]
   ## Subset training points to new optimized dataset
@@ -293,7 +315,7 @@ for(d in depths){
   names(Qd.rast) <- "ptspercell"
   pts.pcv <- extract(Qd.rast, pts.pcv, df=T, sp=T)
   ## Create spatial density based weights: better way to do this??
-  pts.pcv@data$sp_wts <- 1-(pts.pcv@data$ptspercell / (max(pts.pcv@data$ptspercell)*1.1))
+  pts.pcv@data$sp_wts <- (1-(pts.pcv@data$ptspercell / (max(pts.pcv@data$ptspercell)*1.1)))^5
   ## Feature space weights
   vars <- c("SLPNED6", "POSNED6", "EVI", "PPT", "TEMP")
   p1 <- seq(0, 1, 0.1)
@@ -336,20 +358,43 @@ for(d in depths){
   Sys.time()
   CV_wts_grid_lst <- lapply(1:nrow(grid_vec),CV_wts_grid_fn)
   Sys.time()
-  #saveRDS(CV_wts_grid_lst,paste(predfolder,"/CV_wts_grid_lst_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep="")) # takes forever
+  #saveRDS(CV_wts_grid_lst,paste(predfolder,"/CV_wts_grid_lst_", prop, '_',d, "_cm.rds",sep="")) # takes forever
+  ## Validation metrics for CVs with different case weighting schemes
+  ## Subset CVs to recent scd points
+  CV_wts_grid_lst_scd_gps <- lapply(1:length(CV_wts_grid_lst),function(x){
+    df <- CV_wts_grid_lst[[x]]
+    df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"),]
+    return(df)
+  })
+  CV_wts_grid_lst_scd_all <- lapply(1:length(CV_wts_grid_lst),function(x){
+    df <- CV_wts_grid_lst[[x]]
+    df <- df[df$mtchtype=="scd",]
+    return(df)
+  })
   ## Validation metrics for CVs with different case weighting schemes
   Grid_wt_valmets <- DSMprops::valmetrics(xlst = CV_wts_grid_lst, trans = trans, prop = prop, depth = d)
-  ## Now pick model mode ranking on multiple criteria for weighting schemes
-  Grid_wt_valmets$RPI.cvave.rnk <- rank(Grid_wt_valmets$RPI.cvave,ties.method = "average")
-  Grid_wt_valmets$RMSE.scd_bt.rnk <- rank(Grid_wt_valmets$RMSE.scd_bt,ties.method = "average")
-  Grid_wt_valmets$MedAE.scd_bt.rnk <- rank(Grid_wt_valmets$MedAE.scd_bt,ties.method = "average")
-  Grid_wt_valmets$Rsq.scd.rnk <- rank(Grid_wt_valmets$Rsq.scd,ties.method = "average")
-  Grid_wt_valmets$Rsq.rnk <- (nrow(Grid_wt_valmets)+1) - rank(Grid_wt_valmets$Rsq,ties.method = "average")
-  Grid_wt_valmets$tot_rank <- apply(Grid_wt_valmets[,c("RPI.cvave.rnk","RMSE.scd_bt.rnk","MedAE.scd_bt.rnk","Rsq.rnk","Rsq.scd.rnk")], MARGIN = 1, FUN=mean)
-  write.table(Grid_wt_valmets, paste(predfolder,"/CV_wts_grid_lst_CVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
+  Grid_wt_valmets_scd_gps <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_gps, trans = trans, prop = prop, depth = d)
+  Grid_wt_valmets_scd_all <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_all, trans = trans, prop = prop, depth = d)
+  wt_valmets_rank <- data.frame( cvgrid = Grid_wt_valmets$cvgrid, Rsq.all = Grid_wt_valmets$Rsq, RPI.all = Grid_wt_valmets$RPI.cvave,
+                              Rsq.scd = Grid_wt_valmets_scd_all$Rsq, Rsq.gscd = Grid_wt_valmets_scd_gps$Rsq, QRMSE_bt.gscd = Grid_wt_valmets$QRMSE_bt,
+                              QMedAE_bt.gscd = Grid_wt_valmets_scd_gps$QMedAE_bt)
+  Grid_wt_valmets_lst <- list(Grid_wt_valmets,Grid_wt_valmets_scd_gps,Grid_wt_valmets_scd_all,wt_valmets_rank)
+  names(Grid_wt_valmets_lst) <- c("Grid_wt_valmets","Grid_wt_valmets_scd_gps","Grid_wt_valmets_scd_all","wt_valmets_rank")
+  saveRDS(Grid_wt_valmets_lst,paste(predfolder,"/CV_wts_grid_wt_valmets_", prop, '_',d, "_cm.rds",sep=""))
+  ## Now pick model mode ranking on multiple criteria
+  wt_valmets_rank$RPI.cvave.rnk <- rank(wt_valmets_rank$RPI.all,ties.method = "average")
+  wt_valmets_rank$QRMSE_bt.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QRMSE_bt.gscd,ties.method = "average")
+  wt_valmets_rank$QMedAE_bt.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QMedAE_bt.gscd,ties.method = "average")
+  wt_valmets_rank$Rsq.scd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.scd,ties.method = "average")
+  wt_valmets_rank$Rsq.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.gscd,ties.method = "average")
+  wt_valmets_rank$Rsq.all.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.all,ties.method = "average")
+  wt_valmets_rank$rank_ave <- apply(wt_valmets_rank[,c("RPI.cvave.rnk","QRMSE_bt.gscd.rnk","QMedAE_bt.gscd.rnk",
+                                                 "Rsq.scd.rnk","Rsq.gscd.rnk","Rsq.all.rnk")], MARGIN = 1, FUN=mean)
+  wt_valmets_rank$rank_final <- rank(wt_valmets_rank$rank_ave,ties.method = "random")
+  write.table(wt_valmets_rank, paste(predfolder,"/Grid_wt_valmets_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
 
-  ## TODO Now set up final case weights based on grid search
-  model_params <- str_split(Grid_wt_valmets[Grid_wt_valmets$tot_rank==min(Grid_wt_valmets$tot_rank),c("cvgrid")][1],"_")[[1]]
+  ## Now set up final case weights based on grid search
+  model_params <- str_split(wt_valmets_rank[wt_valmets_rank$rank_final==min(wt_valmets_rank$rank_final),c("cvgrid")][1],"_")[[1]]
   spat_param <- model_params[(match("spat",model_params)+1):length(model_params)]
   feat_param <- model_params[(match("feat",model_params)+1):(match("spat",model_params)-1)]
   ## Adjust weights according to chosen model
@@ -359,8 +404,8 @@ for(d in depths){
                                 feat_wts = ifelse(feat_param == "none",1,feat_wts)) # feat wts
 
   ## Save training points file
-  saveRDS(pts.pcv, paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
-  pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
+  saveRDS(pts.pcv, paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
+  #pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
 
   ## TODO ? model tuning step for mtry, min node size, ntrees, other params???
 
@@ -379,34 +424,41 @@ for(d in depths){
 
   ## Combine CV tables and save in list as R object
   cv.lst <- list(pts.cv10f,pts.s1cv,pts.s10cv,pts.s100cv)
-  #saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep="")) # takes forever...
-  #cv.lst <- readRDS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
-  rm(pts.cv10f,pts.s1cv,pts.s10cv,pts.s100cv)
-  gc()
+  #saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep="")) # takes forever...
+  #cv.lst <- readRDS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep=""))
 
   ## Validation metrics for CVs at different spatial supports
-  valmets <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, prop = prop, depth = d)
-  write.table(valmets, paste(predfolder,"/CVstats_", prop,"_", d, "_cm_nasisSSURGO_SG100.txt",sep=""), sep = "\t", row.names = FALSE)
+  valmets_sCV <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, prop = prop, depth = d)
+  write.table(valmets_sCV, paste(predfolder,"/sCVstats_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
 
 
   ###### Cross validation plots
   ## All data
   viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
-  gplt.dcm.2D.CV <- ggplot(data=pts.pcv@data, aes(prop_t, pcvpred)) +
+  scaleFUN <- function(x) round(x,0)
+  gplt.dcm.2D.CV <- ggplot(data=pts.s10cv, aes(prop_t, pcvpred)) +
     stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
     theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
-    xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri)) +
-    ggtitle(paste("Cross val", prop, d, "cm",sep=" "))
-  gplt.dcm.2D.CV
+    xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
+    ggtitle(paste("10km Cross val", prop, d, "cm",sep=" "))
+  #gplt.dcm.2D.CV
   ggsave(paste(predfolder,'/ValPlot_1to1_all_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
   ## Now just SCD pedons
-  gplt.dcm.2D.CV.SCD <- ggplot(data=pts.pcv@data[pts.pcv@data$mtchtype=="scd"], aes(prop_t, pcvpred)) +
+  gplt.dcm.2D.CV.SCD <- ggplot(data=pts.s10cv[pts.s10cv$mtchtype=="scd",], aes(prop_t, pcvpred)) +
     stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1)  + #xlim(-5,105) + ylim(-5,105) +
     theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
-    xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri)) +
-    ggtitle(paste("Cross val", prop, d, "cm",sep=" "))
-  gplt.dcm.2D.CV.SCD
+    xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
+    ggtitle(paste("10km Cross val", prop, d, "cm",sep=" "))
+  #gplt.dcm.2D.CV.SCD
   ggsave(paste(predfolder,'/ValPlot_1to1_scd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.SCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
+  ## Now just with SCD pedons with GPS or after 2010
+  gplt.dcm.2D.CV.gSCD <- ggplot(data=pts.s10cv[pts.s10cv$mtchtype=="scd"&(pts.s10cv$geo_cls=="gps"|pts.s10cv$geo_cls=="gps2"),], aes(prop_t, pcvpred)) +
+    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1)  + #xlim(-5,105) + ylim(-5,105) +
+    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
+    xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn( name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
+    ggtitle(paste("10km Cross val", prop, d, "cm",sep=" "))
+  #gplt.dcm.2D.CV.gSCD
+  ggsave(paste(predfolder,'/ValPlot_1to1_gscd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.gSCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
 
 
   ############### Build quantile Random Forest
@@ -426,11 +478,11 @@ for(d in depths){
   detach(pts.pcv@data)
   pts.pcv@data$trainpredsadj <- predict(rf_lm_adj, newdata=pts.pcv@data)
   ## Save important documentation and intermediate files as R objects
-  saveRDS(rf.qrf, paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
-  saveRDS(rf_lm_adj, paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm_nasisSSURGO_SG100.rds",sep=""))
+  saveRDS(rf.qrf, paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm.rds",sep=""))
+  saveRDS(rf_lm_adj, paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm.rds",sep=""))
   ## Block to open prior files for updating work
-  # rf.qrf <- readRDS(paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm_nasisSSURGO_SG100.rds",sep=""))
-  # rf_lm_adj <- readRDS(paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm_nasisSSURGO_SG100.rds",sep=""))
+  # rf.qrf <- readRDS(paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm.rds",sep=""))
+  # rf_lm_adj <- readRDS(paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm.rds",sep=""))
 
 
   ############################## Raster Preditions ######################################################
@@ -446,8 +498,8 @@ for(d in depths){
 
   ## Predict onto covariate grid
   ## Parallelized predict
-  rasterOptions(maxmemory = 5e+09,chunksize = 9e+08)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
-  beginCluster(55,type='SOCK')
+  rasterOptions(maxmemory = 6e+09,chunksize = 1e+09)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
+  beginCluster(50,type='SOCK')
   Sys.time()
   predl <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.025)),progress="text")
   Sys.time()
@@ -550,7 +602,7 @@ for(d in depths){
       ind <- ifelse(ind>65533,65533,ind)
       return(ind)
     }
-    PIrelwidth_bt <- clusterR(s_bt, overlay, args=list(fun=PIrelwidth_bt.fn),progress = "text", export='varrange')
+    PIrelwidth <- clusterR(s_bt, overlay, args=list(fun=PIrelwidth_bt.fn),progress = "text", export='varrange')
     ## Rescale rasters for saving
     pred_btsc <- clusterR(pred_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
     predlm_btsc <- clusterR(predlm_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
@@ -562,10 +614,20 @@ for(d in depths){
     writeRaster(predl_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_l_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
     writeRaster(predh_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_h_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
     #writeRaster(PIwidth_bt, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_width_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
-    writeRaster(PIrelwidth_bt, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_100x_",d,"_cm_2D_QRF_95PI_relwidth_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
+    writeRaster(PIrelwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_100x_",d,"_cm_2D_QRF_95PI_relwidth_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
   }
+  ## summarize RPI in full raster prediction using sample for speed (tested against full average)
+  rpi_samp <- sampleRegular(PIrelwidth,size=1000000,useGDAL=T)
+  rpi_samp <- na.omit(rpi_samp)
+  gRPI.ave <- mean(rpi_samp)
+  gRPI.med <- median(rpi_samp)
+  gRPI.n <- length(rpi.samp)
+  RPIg_df <- data.frame(gRPI.ave,gRPI.med,gRPI.n)
+  write.table(RPIg_df, paste(predfolder,"/gRPI_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
   ## Close out raster cluster
   endCluster()
+  posttime <- Sys.time()
+  print(paste(d, " cm was done at", posttime,"in",runtime, sep=" "))
 }
 
 
