@@ -13,7 +13,7 @@
 #'
 valmetrics <- function(xlst, trans, varrange, prop, depth){
 
-  if(!is.list(xlst)){ xlst <- list(xlst)}
+  if(is.data.frame(xlst)){ xlst <- list(xlst)}
 
   valseq <- seq.int(length(xlst))
 
