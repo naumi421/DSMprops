@@ -67,6 +67,7 @@ SpatCVranger <- function(sp, nfolds = 10, fm, rast, resol, os = "windows", train
       lm.pcv <- lm(prop_t~pcvpredpre)
       detach(traindf)
       testdf$pcvpred <- predict(lm.pcv, newdata=testdf)
+      testdf$foldRSq <- 1-var(testdf$prop_t - testdf$pcvpred, na.rm=TRUE)/var(testdf$prop_t, na.rm=TRUE)
       return(testdf)
     }
     ## Linux parallel list apply
@@ -97,6 +98,7 @@ SpatCVranger <- function(sp, nfolds = 10, fm, rast, resol, os = "windows", train
       lm.pcv <- lm(prop_t~pcvpredpre)
       detach(traindf)
       testdf$pcvpred <- predict(lm.pcv, newdata=testdf)
+      testdf$foldRSq <- 1-var(testdf$prop_t - testdf$pcvpred, na.rm=TRUE)/var(testdf$prop_t, na.rm=TRUE)
       return(testdf)
     }
     ## list apply of function

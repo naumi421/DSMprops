@@ -66,11 +66,26 @@ polybound <- readOGR("/ped/GIS_Archive/US_boundaries/states_21basic", "conus_bou
 polybound <- spTransform(polybound, cov.proj)
 n.pts <- n.pts[polybound,]
 
+####### Now create a random sample of points in CONUS to use for gRPI estimation
+pts.gRPI <- spsample(polybound[1,], 1000000, type = 'random')
+pts.gRPI <- SpatialPointsDataFrame(pts.gRPI, data.frame(row.names=row.names(pts.gRPI), ID=1:length(pts.gRPI)))
+
 ## Plot to ensure alignment bw points and rasters
 # plot(projgrid)
 # plot(n.pts, add=TRUE)
+# plot(pts.gRPI, add=TRUE)
 
-## Parallelized extract: (larger datasets)
+## Parallelized extract for gRPI points
+# rasterOptions(maxmemory = 4e+09)
+# pts.gRPI <- DSMprops::parPTextr(sp = pts.gRPI, gridlist = cov.grids, os = "linux",nthreads = 50)
+# pts.gRPI <- na.omit(pts.gRPI)
+# ## Save points
+# saveRDS(pts.gRPI, paste(ptsfolder,"/CONUS_random_gRPIsamp.rds",sep=""))
+## Updated extract for CONUS
+pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp.rds",sep=""))
+
+
+## Parallelized extract for nasis points: (larger datasets)
 # rasterOptions(maxmemory = 4e+09)
 # pts.ext <- DSMprops::parPTextr(sp = n.pts, gridlist = cov.grids, os = "linux",nthreads = 50)
 # ## Save points
@@ -234,6 +249,59 @@ for(d in depths){
   ## Set training parameters for trials
   trn.params <- list(ntrees = 100, min.node.size = 1)
 
+  #### summarize RPI in full raster prediction using sample for speed (tested against full average)
+  ## Determine 95% interquartile range for relative prediction interval
+  varrange_gRPI <- as.numeric(quantile(pts.extcc@data$prop, probs=c(0.975), na.rm=T)-quantile(pts.extcc@data$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
+  gRPI_rf <- ranger(formulaStringRF, data=pts.extcc@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 60,
+                    min.node.size = trn.params$min.node.size)
+  ## Predict onto random gRPI sample pts
+  pts.gRPI$lowpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.025))$predictions
+  pts.gRPI$highpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.975))$predictions
+  pts.gRPI$RPI <- (pts.gRPI@data$highpred - pts.gRPI@data$lowpred) / varrange_gRPI
+  gRPI.ave <- mean(pts.gRPI@data$RPI)
+  gRPI.med <- median(pts.gRPI@data$RPI)
+  gRPI.n <- length(rpi_samp)
+  RPIg_df <- data.frame(gRPI.ave,gRPI.med,gRPI.n)
+  write.table(RPIg_df, paste(predfolder,"/gRPI_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
+  ## Match best CV scheme using gRPI
+  gRPIall <- ave(gRPI.ave,gRPI.med)
+
+
+  ## Normal 10-fold cross validation
+  cv10f <- DSMprops::CVranger(x = pts.pcv@data, fm = formulaStringRF, train.params = trn.params,
+                              nfolds = 10, nthreads = 60, os = "linux") # 5min
+  ## Spatial 10-fold cross validation on 1km blocks
+  s1cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,
+                                    rast = img10kf, nfolds = 10, nthreads = 60, resol = 1, os = "linux") # 6 min
+  ## Spatial 10-fold cross validation on 10km blocks
+  s10cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,
+                                     rast = img10kf, nfolds = 10, nthreads = 60, resol = 10, os = "linux") # 6min
+  ## Spatial 10-fold cross validation on 30km blocks
+  s50cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,
+                                     rast = img10kf, nfolds = 10, nthreads = 60, resol = 50, os = "linux") # 6min
+  ## Spatial 10-fold cross validation on 100km blocks
+  s100cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,
+                                      rast = img10kf, nfolds = 10, nthreads = 60, resol = 100, os = "linux")
+
+  ## Combine CV tables and save in list as R object
+  cv.lst <- list(cv10f,s1cv10f,s10cv10f,s50cv10f, s100cv10f)
+  #saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep="")) # takes forever...
+  #cv.lst <- readRDS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep=""))
+
+  ## Validation metrics for CVs at different spatial supports
+  valmets_sCV <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, prop = prop, depth = d)
+  valmets_sCV$RPIall <- (valmets_sCV$RPI.cvave + valmets_sCV$RPI.cvmed) / 2
+  idx_val <- which(abs(valmets_sCV$RPIall-gRPIall)==min(abs(valmets_sCV$RPIall-gRPIall)))
+  bestval <- valmets_sCV[idx_val,c("valtype")]
+  bestvalpts <- get(bestval)
+  valmets_sCV$bestval <- bestval
+  ## Pick best CV resolution based on RPI match
+  resol_rpi <- as.numeric(gsub("s", "", str_split(bestval,"cv")[[1]][1]))
+  ## Save results
+  write.table(valmets_sCV, paste(predfolder,"/sCVstats_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
+  saveRDS(bestvalpts,paste(predfolder,"/CVfull_best_pts_", prop, '_',d, "_cm.rds",sep=""))
+
+
   ## Now prepare a data tier grid search using the chosen cross validation approach
   geo_vec <- c("gps","gps_gps2","gps_gps2_gps3", "gps_gps2_gps3_unk")
   srce_vec <- c("scd","scd_direct","scd_direct_home","scd_direct_home_adjacent")
@@ -246,8 +314,8 @@ for(d in depths){
     ptseval <- pts.extcc
     ptseval <- ptseval[ptseval@data$geo_cls %in% geo_levs,]
     ptseval <- ptseval[ptseval@data$mtchtype %in% srce_levs,]
-    nfolds <- 5
-    resol <- 10 # kilometers
+    nfolds <- 10
+    resol <- resol_rpi # kilometers
     ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
                                         rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux",casewts = "tot_wts")
     ptsevalcv$cvgrid <- paste(colnames(levs),levs[1,],collapse="_",sep="_")
@@ -275,7 +343,7 @@ for(d in depths){
   Grid_valmets_scd_all <- DSMprops::valmetrics(xlst = CV_grid_lst_scd_all, trans = trans, prop = prop, depth = d)
   valmets_rank <- data.frame( cvgrid = Grid_valmets$cvgrid, Rsq.all = Grid_valmets$Rsq, RPI.all = Grid_valmets$RPI.cvave,
                               Rsq.scd = Grid_valmets_scd_all$Rsq, Rsq.gscd = Grid_valmets_scd_gps$Rsq, QRMSE_bt.gscd = Grid_valmets$QRMSE_bt,
-                             QMedAE_bt.gscd = Grid_valmets_scd_gps$QMedAE_bt)
+                             QMedAE_bt.gscd = Grid_valmets_scd_gps$QMedAE_bt, n = Grid_valmets$n)
   grid_valmets_lst <- list(Grid_valmets,Grid_valmets_scd_gps,Grid_valmets_scd_all,valmets_rank)
   names(grid_valmets_lst) <- c("Grid_valmets","Grid_valmets_scd_gps","Grid_valmets_scd_all","valmets_rank")
   saveRDS(grid_valmets_lst,paste(predfolder,"/CV_grid_valmets_", prop, '_',d, "_cm.rds",sep=""))
@@ -341,8 +409,8 @@ for(d in depths){
     if(levs$feat == "none"){ptseval@data$feat_wts <- 1}
     if(levs$spat == "mid"){ptseval@data$sp_wts <- sqrt(ptseval@data$sp_wts)}
     if(levs$spat == "none"){ptseval@data$sp_wts <- 1}
-    nfolds <- 5
-    resol <- 10 # kilometers
+    nfolds <- 10
+    resol <- resol_rpi # kilometers
     ptseval@data$tot_wts <- ptseval@data$feat_wts * ptseval@data$sp_wts
     # ptsevalsamp <- sample(ptseval@data$peiid, size = floor(0.75 * nrow(ptseval@data)), prob = ptseval@data$tot_wts)
     # ptseval <- ptseval[ptseval@data$peiid %in% ptsevalsamp,]
@@ -377,7 +445,7 @@ for(d in depths){
   Grid_wt_valmets_scd_all <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_all, trans = trans, prop = prop, depth = d)
   wt_valmets_rank <- data.frame( cvgrid = Grid_wt_valmets$cvgrid, Rsq.all = Grid_wt_valmets$Rsq, RPI.all = Grid_wt_valmets$RPI.cvave,
                               Rsq.scd = Grid_wt_valmets_scd_all$Rsq, Rsq.gscd = Grid_wt_valmets_scd_gps$Rsq, QRMSE_bt.gscd = Grid_wt_valmets$QRMSE_bt,
-                              QMedAE_bt.gscd = Grid_wt_valmets_scd_gps$QMedAE_bt)
+                              QMedAE_bt.gscd = Grid_wt_valmets_scd_gps$QMedAE_bt, n = Grid_wt_valmets$n)
   Grid_wt_valmets_lst <- list(Grid_wt_valmets,Grid_wt_valmets_scd_gps,Grid_wt_valmets_scd_all,wt_valmets_rank)
   names(Grid_wt_valmets_lst) <- c("Grid_wt_valmets","Grid_wt_valmets_scd_gps","Grid_wt_valmets_scd_all","wt_valmets_rank")
   saveRDS(Grid_wt_valmets_lst,paste(predfolder,"/CV_wts_grid_wt_valmets_", prop, '_',d, "_cm.rds",sep=""))
@@ -393,6 +461,12 @@ for(d in depths){
   wt_valmets_rank$rank_final <- rank(wt_valmets_rank$rank_ave,ties.method = "random")
   write.table(wt_valmets_rank, paste(predfolder,"/Grid_wt_valmets_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
 
+  ## Pick out CV matrix to save and plot with
+  idx_wts_val <- which(wt_valmets_rank$rank_final==1)
+  #bestwtval <- wt_valmets_rank[idx_val,c("cvgrid")]
+  bestvalwtpts <- CV_wts_grid_lst[[idx_wts_val]]
+  saveRDS(bestvalwtpts,paste(predfolder,"/CV_finalwts_best_pts_", prop, '_',d, "_cm.rds",sep=""))
+
   ## Now set up final case weights based on grid search
   model_params <- str_split(wt_valmets_rank[wt_valmets_rank$rank_final==min(wt_valmets_rank$rank_final),c("cvgrid")][1],"_")[[1]]
   spat_param <- model_params[(match("spat",model_params)+1):length(model_params)]
@@ -402,37 +476,40 @@ for(d in depths){
                                 sp_wts = ifelse(spat_param == "none",1,sp_wts)) # spatial wts
   pts.pcv@data <- dplyr::mutate(pts.pcv@data, feat_wts = ifelse(feat_param == "mid",feat_wts^(1/7),feat_wts),
                                 feat_wts = ifelse(feat_param == "none",1,feat_wts)) # feat wts
-
   ## Save training points file
   saveRDS(pts.pcv, paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
   #pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
 
+  ###### Cross validation plots
+  ## All data
+  viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
+  scaleFUN <- function(x) round(x,0)
+  gplt.dcm.2D.CV <- ggplot(data=bestvalwtpts, aes(prop_t, pcvpred)) +
+    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
+    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
+    xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
+    ggtitle(paste(bestval,"Cross val", prop, d, "cm",sep=" "))
+  #gplt.dcm.2D.CV
+  ggsave(paste(predfolder,'/ValPlot_1to1_all_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
+  ## Now just SCD pedons
+  gplt.dcm.2D.CV.SCD <- ggplot(data=bestvalwtpts[bestvalwtpts$mtchtype=="scd",], aes(prop_t, pcvpred)) +
+    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1)  + #xlim(-5,105) + ylim(-5,105) +
+    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
+    xlab("SCD Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
+    ggtitle(paste(bestval,"Cross val", prop, d, "cm",sep=" "))
+  #gplt.dcm.2D.CV.SCD
+  ggsave(paste(predfolder,'/ValPlot_1to1_scd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.SCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
+  ## Now just with SCD pedons with GPS or after 2010
+  gplt.dcm.2D.CV.gSCD <- ggplot(data=bestvalwtpts[bestvalwtpts$mtchtype=="scd"&(bestvalwtpts$geo_cls=="gps"|bestvalwtpts$geo_cls=="gps2"),], aes(prop_t, pcvpred)) +
+    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1)  + #xlim(-5,105) + ylim(-5,105) +
+    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
+    xlab("gps SCD Measured") + ylab("CV Prediction") + scale_fill_gradientn( name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
+    ggtitle(paste(bestval,"Cross val", prop, d, "cm",sep=" "))
+  #gplt.dcm.2D.CV.gSCD
+  ggsave(paste(predfolder,'/ValPlot_1to1_gscd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.gSCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
+
+
   ## TODO ? model tuning step for mtry, min node size, ntrees, other params???
-
-  ## Normal 10-fold cross validation
-  cv10f <- DSMprops::CVranger(x = pts.pcv@data, fm = formulaStringRF, train.params = trn.params,
-                                nfolds = 10, nthreads = 60, os = "linux") # 5min
-  ## Spatial 10-fold cross validation on 1km blocks
-  s1cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,
-                                     rast = img10kf, nfolds = 10, nthreads = 60, resol = 1, os = "linux") # 6 min
-  ## Spatial 10-fold cross validation on 10km blocks
-  s10cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,
-                                      rast = img10kf, nfolds = 10, nthreads = 60, resol = 10, os = "linux") # 6min
-  ## Spatial 10-fold cross validation on 30km blocks
-  s50cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,
-                                      rast = img10kf, nfolds = 10, nthreads = 60, resol = 50, os = "linux") # 6min
-  ## Spatial 10-fold cross validation on 100km blocks
-  s100cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,
-                                       rast = img10kf, nfolds = 10, nthreads = 60, resol = 100, os = "linux")
-
-  ## Combine CV tables and save in list as R object
-  cv.lst <- list(cv10f,s1cv10f,s10cv10f,s50cv10f, s100cv10f)
-  #saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep="")) # takes forever...
-  #cv.lst <- readRDS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep=""))
-
-  ## Validation metrics for CVs at different spatial supports
-  valmets_sCV <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, prop = prop, depth = d)
-  write.table(valmets_sCV, paste(predfolder,"/sCVstats_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
 
   ############### Build quantile Random Forest
   ## TODO incorporate updated weighting or tuning parameters???????
@@ -591,51 +668,11 @@ for(d in depths){
   }
   ## Close out raster cluster
   endCluster()
-  ## summarize RPI in full raster prediction using sample for speed (tested against full average)
-  rpi_samp <- sampleRegular(PIrelwidth,size=1000000,useGDAL=T)
-  rpi_samp <- na.omit(rpi_samp)
-  gRPI.ave <- mean(rpi_samp)/1000
-  gRPI.med <- median(rpi_samp)/1000
-  gRPI.n <- length(rpi_samp)
-  RPIg_df <- data.frame(gRPI.ave,gRPI.med,gRPI.n)
-  write.table(RPIg_df, paste(predfolder,"/gRPI_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
-  ## Match best CV scheme using gRPI
-  gRPIall <- ave(gRPI.ave,gRPI.med)
-  valmets_sCV$RPIall <- (valmets_sCV$RPI.cvave + valmets_sCV$RPI.cvmed) / 2
-  idx_val <- which(abs(valmets_sCV$RPIall-gRPIall)==min(abs(valmets_sCV$RPIall-gRPIall)))
-  bestval <- valmets_sCV[idx_val,c("valtype")]
-  bestvalpts <- get(bestval)
-  saveRDS(bestvalpts,paste(predfolder,"/CVbest_pts_", prop, '_',d, "_cm.rds",sep=""))
 
-  ###### Cross validation plots
-  ## All data
-  viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
-  scaleFUN <- function(x) round(x,0)
-  gplt.dcm.2D.CV <- ggplot(data=bestvalpts, aes(prop_t, pcvpred)) +
-    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
-    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
-    xlab("Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
-    ggtitle(paste(bestval,"Cross val", prop, d, "cm",sep=" "))
-  #gplt.dcm.2D.CV
-  ggsave(paste(predfolder,'/ValPlot_1to1_all_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
-  ## Now just SCD pedons
-  gplt.dcm.2D.CV.SCD <- ggplot(data=bestvalpts[bestvalpts$mtchtype=="scd",], aes(prop_t, pcvpred)) +
-    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1)  + #xlim(-5,105) + ylim(-5,105) +
-    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
-    xlab("SCD Measured") + ylab("CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
-    ggtitle(paste(bestval,"Cross val", prop, d, "cm",sep=" "))
-  #gplt.dcm.2D.CV.SCD
-  ggsave(paste(predfolder,'/ValPlot_1to1_scd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.SCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
-  ## Now just with SCD pedons with GPS or after 2010
-  gplt.dcm.2D.CV.gSCD <- ggplot(data=bestvalpts[bestvalpts$mtchtype=="scd"&(bestvalpts$geo_cls=="gps"|bestvalpts$geo_cls=="gps2"),], aes(prop_t, pcvpred)) +
-    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1)  + #xlim(-5,105) + ylim(-5,105) +
-    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
-    xlab("gps SCD Measured") + ylab("CV Prediction") + scale_fill_gradientn( name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
-    ggtitle(paste(bestval,"Cross val", prop, d, "cm",sep=" "))
-  #gplt.dcm.2D.CV.gSCD
-  ggsave(paste(predfolder,'/ValPlot_1to1_gscd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.gSCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
+
   ## Wrap up loop
   posttime <- Sys.time()
+  runtime <- posttime - pretime
   print(paste(d, " cm was done at", posttime,"in",runtime, sep=" "))
 }
 

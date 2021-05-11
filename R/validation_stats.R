@@ -27,6 +27,7 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     n <- length(pts.extpcv[,1])
     RMSE <- sqrt(mean((pts.extpcv$prop_t - pts.extpcv$pcvpred)^2, na.rm=TRUE))
     Rsq <- 1-var(pts.extpcv$prop_t - pts.extpcv$pcvpred, na.rm=TRUE)/var(pts.extpcv$prop_t, na.rm=TRUE)
+    if("foldRSq"%in%colnames(pts.extpcv)){Rsqvar <- var(unique(pts.extpcv$foldRsq), na.rm=TRUE)}else{Rsqvar <- 'NA'}
     Rsqpre <- 1-var(pts.extpcv$prop_t - pts.extpcv$pcvpredpre, na.rm=TRUE)/var(pts.extpcv$prop_t, na.rm=TRUE)
     Bias <- mean(pts.extpcv$prop_t - pts.extpcv$pcvpred, na.rm=TRUE)/mean(pts.extpcv$prop_t, na.rm=T)
     ## Back transformed: create pcvpred_bt even if not tranformed for cv.depth function: Using Duan's smearing estimator
