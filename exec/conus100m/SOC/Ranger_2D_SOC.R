@@ -261,14 +261,27 @@ for(d in depths){
   ## Predict onto random gRPI sample pts
   pts.gRPI$lowpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.025))$predictions
   pts.gRPI$highpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.975))$predictions
-  pts.gRPI$RPI <- (pts.gRPI$highpred - pts.gRPI$lowpred) / varrange_gRPI
+  ## Back transform low PI
+  # TODO Not sure if smearing estimator should be used on PIs? Probably not since the linear
+  # adjustment does not apply.
+  if(trans=="log10") {pts.gRPI$lowpred_bt <- 10^(pts.gRPI$lowpred) - 0.1}
+  if(trans=="log") {pts.gRPI$lowpred_bt <- exp(pts.gRPI$lowpred) - 1}
+  if(trans=="sqrt") {pts.gRPI$lowpred_bt <- (pts.gRPI$lowpred)^2}
+  if(trans=="none") {pts.gRPI$lowpred_bt <- pts.gRPI$lowpred}
+  ## Back transform Upper PI
+  if(trans=="log10") {pts.gRPI$highpred_bt <- 10^(pts.gRPI$highpred) - 0.1}
+  if(trans=="log") {pts.gRPI$highpred_bt <- exp(pts.gRPI$highpred) - 1}
+  if(trans=="sqrt") {pts.gRPI$highpred_bt <- (pts.gRPI$highpred)^2}
+  if(trans=="none") {pts.gRPI$highpred_bt <- pts.gRPI$highpred}
+  pts.gRPI$RPI <- (pts.gRPI$highpred_bt - pts.gRPI$lowpred_bt) / varrange_gRPI
   gRPI.ave <- mean(pts.gRPI$RPI)
   gRPI.med <- median(pts.gRPI$RPI)
   gRPI.n <- length(pts.gRPI$RPI)
   RPIg_df <- data.frame(gRPI.ave,gRPI.med,gRPI.n)
   write.table(RPIg_df, paste(predfolder,"/gRPI_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
   ## Match best CV scheme using gRPI
-  gRPIall <- ave(gRPI.ave,gRPI.med)
+  #gRPIall <- ave(gRPI.ave,gRPI.med) # switched to just gRPI.ave
+
 
 
   ## Normal 10-fold cross validation
@@ -295,7 +308,7 @@ for(d in depths){
   ## Validation metrics for CVs at different spatial supports
   valmets_sCV <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, prop = prop, depth = d)
   valmets_sCV$RPIall <- (valmets_sCV$RPI.cvave + valmets_sCV$RPI.cvmed) / 2
-  idx_val <- which(abs(valmets_sCV$RPIall-gRPIall)==min(abs(valmets_sCV$RPIall-gRPIall)))
+  idx_val <- which(abs(valmets_sCV$RPI.cvave-gRPI.ave)==min(abs(valmets_sCV$RPI.cvave-gRPI.ave)))
   bestval <- valmets_sCV[idx_val,c("valtype")]
   bestvalpts <- get(bestval)
   valmets_sCV$bestval <- bestval
