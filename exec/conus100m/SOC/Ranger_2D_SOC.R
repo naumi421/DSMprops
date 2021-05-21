@@ -170,6 +170,10 @@ scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
 scd.pts.ext.hor$prop <- scd.pts.ext.hor$oc ## UPDATE everytime!
 scdprop <- "oc"
 scd.pts.ext.hor$tid <- "scd"
+## Visualize for consistency with nasis and for errors
+hist(scd.pts.ext.hor$prop)
+summary(scd.pts.ext.hor$prop) # Some slightly negative values from lab error
+scd.pts.ext.hor$prop <- ifelse(scd.pts.ext.hor$prop <= 0,0.01,scd.pts.ext.hor$prop) # rid of negatives
 
 ## Prep base raster for density calculations and spatial cross validation
 # rasterOptions(maxmemory = 5e+08,chunksize = 5e+07)
