@@ -339,19 +339,19 @@ for(d in depths){
   Grid_valmets_scd_gps <- DSMprops::valmetrics(xlst = CV_grid_lst_scd_gps, trans = trans, prop = prop, depth = d)
   Grid_valmets_scd_all <- DSMprops::valmetrics(xlst = CV_grid_lst_scd_all, trans = trans, prop = prop, depth = d)
   valmets_rank <- data.frame( cvgrid = Grid_valmets$cvgrid, Rsq.all = Grid_valmets$Rsq, RPI.all = Grid_valmets$RPI.cvave,
-                              Rsq.scd = Grid_valmets_scd_all$Rsq, Rsq.gscd = Grid_valmets_scd_gps$Rsq, QRMSE_bt.gscd = Grid_valmets$QRMSE_bt,
-                             QMedAE_bt.gscd = Grid_valmets_scd_gps$QMedAE_bt, n = Grid_valmets$n)
+                              Rsq.scd = Grid_valmets_scd_all$Rsq, Rsq.gscd = Grid_valmets_scd_gps$Rsq, QRMSE.gscd = Grid_valmets$QRMSE,
+                             QMedAE.gscd = Grid_valmets_scd_gps$QMedAE, n = Grid_valmets$n)
   grid_valmets_lst <- list(Grid_valmets,Grid_valmets_scd_gps,Grid_valmets_scd_all,valmets_rank)
   names(grid_valmets_lst) <- c("Grid_valmets","Grid_valmets_scd_gps","Grid_valmets_scd_all","valmets_rank")
   saveRDS(grid_valmets_lst,paste(predfolder,"/CV_grid_valmets_", prop, '_',d, "_cm.rds",sep=""))
   ## Now pick model mode ranking on multiple criteria
   valmets_rank$RPI.cvave.rnk <- rank(valmets_rank$RPI.all,ties.method = "average")
-  valmets_rank$QRMSE_bt.gscd.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$QRMSE_bt.gscd,ties.method = "average")
-  valmets_rank$QMedAE_bt.gscd.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$QMedAE_bt.gscd,ties.method = "average")
+  valmets_rank$QRMSE.gscd.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$QRMSE.gscd,ties.method = "average")
+  valmets_rank$QMedAE.gscd.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$QMedAE.gscd,ties.method = "average")
   valmets_rank$Rsq.scd.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$Rsq.scd,ties.method = "average")
   valmets_rank$Rsq.gscd.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$Rsq.gscd,ties.method = "average")
   valmets_rank$Rsq.all.rnk <- (nrow(valmets_rank)+1) - rank(valmets_rank$Rsq.all,ties.method = "average")
-  valmets_rank$rank_ave <- apply(valmets_rank[,c("RPI.cvave.rnk","QRMSE_bt.gscd.rnk","QMedAE_bt.gscd.rnk",
+  valmets_rank$rank_ave <- apply(valmets_rank[,c("RPI.cvave.rnk","QRMSE.gscd.rnk","QMedAE.gscd.rnk",
                                                  "Rsq.scd.rnk","Rsq.gscd.rnk","Rsq.all.rnk")], MARGIN = 1, FUN=mean)
   valmets_rank$rank_final <- rank(valmets_rank$rank_ave,ties.method = "random")
   write.table(valmets_rank, paste(predfolder,"/Grid_valmets_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
@@ -441,19 +441,19 @@ for(d in depths){
   Grid_wt_valmets_scd_gps <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_gps, trans = trans, prop = prop, depth = d)
   Grid_wt_valmets_scd_all <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_all, trans = trans, prop = prop, depth = d)
   wt_valmets_rank <- data.frame( cvgrid = Grid_wt_valmets$cvgrid, Rsq.all = Grid_wt_valmets$Rsq, RPI.all = Grid_wt_valmets$RPI.cvave,
-                              Rsq.scd = Grid_wt_valmets_scd_all$Rsq, Rsq.gscd = Grid_wt_valmets_scd_gps$Rsq, QRMSE_bt.gscd = Grid_wt_valmets$QRMSE_bt,
-                              QMedAE_bt.gscd = Grid_wt_valmets_scd_gps$QMedAE_bt, n = Grid_wt_valmets$n)
+                              Rsq.scd = Grid_wt_valmets_scd_all$Rsq, Rsq.gscd = Grid_wt_valmets_scd_gps$Rsq, QRMSE.gscd = Grid_wt_valmets$QRMSE,
+                              QMedAE.gscd = Grid_wt_valmets_scd_gps$QMedAE, n = Grid_wt_valmets$n)
   Grid_wt_valmets_lst <- list(Grid_wt_valmets,Grid_wt_valmets_scd_gps,Grid_wt_valmets_scd_all,wt_valmets_rank)
   names(Grid_wt_valmets_lst) <- c("Grid_wt_valmets","Grid_wt_valmets_scd_gps","Grid_wt_valmets_scd_all","wt_valmets_rank")
   saveRDS(Grid_wt_valmets_lst,paste(predfolder,"/CV_wts_grid_wt_valmets_", prop, '_',d, "_cm.rds",sep=""))
   ## Now pick model mode ranking on multiple criteria
   wt_valmets_rank$RPI.cvave.rnk <- rank(wt_valmets_rank$RPI.all,ties.method = "average")
-  wt_valmets_rank$QRMSE_bt.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QRMSE_bt.gscd,ties.method = "average")
-  wt_valmets_rank$QMedAE_bt.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QMedAE_bt.gscd,ties.method = "average")
+  wt_valmets_rank$QRMSE.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QRMSE.gscd,ties.method = "average")
+  wt_valmets_rank$QMedAE.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QMedAE.gscd,ties.method = "average")
   wt_valmets_rank$Rsq.scd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.scd,ties.method = "average")
   wt_valmets_rank$Rsq.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.gscd,ties.method = "average")
   wt_valmets_rank$Rsq.all.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.all,ties.method = "average")
-  wt_valmets_rank$rank_ave <- apply(wt_valmets_rank[,c("RPI.cvave.rnk","QRMSE_bt.gscd.rnk","QMedAE_bt.gscd.rnk",
+  wt_valmets_rank$rank_ave <- apply(wt_valmets_rank[,c("RPI.cvave.rnk","QRMSE.gscd.rnk","QMedAE.gscd.rnk",
                                                  "Rsq.scd.rnk","Rsq.gscd.rnk","Rsq.all.rnk")], MARGIN = 1, FUN=mean)
   wt_valmets_rank$rank_final <- rank(wt_valmets_rank$rank_ave,ties.method = "random")
   write.table(wt_valmets_rank, paste(predfolder,"/Grid_wt_valmets_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
