@@ -111,8 +111,8 @@ hist(pts.ext.hor$prop)
 summary(pts.ext.hor$prop)
 ## Set transformation and scaling: UPDATE EVERY TIME!!!!!!!!!!!!!!!!
 trans <- "log" # none, log10, log, or sqrt
-data_type <- "INT1U" # from raster::dataType - INT1U, INT1S, INT2S, INT2U, INT4S, INT4U, FLT4S, FLT8S
-datastretch <- 1
+data_type <- "INT2U" # from raster::dataType - INT1U, INT1S, INT2S, INT2U, INT4S, INT4U, FLT4S, FLT8S
+datastretch <- 10 # converts to grams per kilogram for SOC (reported in % units 0-100)
 datastretchlab <- paste(datastretch,"x",sep="")
 
 ##### Load and prep SCD data
@@ -262,8 +262,6 @@ for(d in depths){
   pts.gRPI$lowpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.025))$predictions
   pts.gRPI$highpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.975))$predictions
   ## Back transform low PI
-  # TODO Not sure if smearing estimator should be used on PIs? Probably not since the linear
-  # adjustment does not apply.
   if(trans=="log10") {pts.gRPI$lowpred_bt <- 10^(pts.gRPI$lowpred) - 0.1}
   if(trans=="log") {pts.gRPI$lowpred_bt <- exp(pts.gRPI$lowpred) - 1}
   if(trans=="sqrt") {pts.gRPI$lowpred_bt <- (pts.gRPI$lowpred)^2}
@@ -279,11 +277,8 @@ for(d in depths){
   gRPI.n <- length(pts.gRPI$RPI)
   RPIg_df <- data.frame(gRPI.ave,gRPI.med,gRPI.n)
   write.table(RPIg_df, paste(predfolder,"/gRPI_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
-  ## Match best CV scheme using gRPI
-  #gRPIall <- ave(gRPI.ave,gRPI.med) # switched to just gRPI.ave
 
-
-
+  ######### Match best CV scheme using gRPI.ave
   ## Normal 10-fold cross validation
   cv10f <- DSMprops::CVranger(x = pts.extcc@data, fm = formulaStringRF, train.params = trn.params,
                               nfolds = 10, nthreads = 60, os = "linux") # 5min
@@ -620,7 +615,7 @@ for(d in depths){
   } else {
     ## Back transformation Stuff
     if(trans=="log10"){
-      smrest <- mean(10^(pts.extcc@data$prop_t - pts.extcc@data$trainpredsadj))
+      smrest <- mean(10^(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
       bt.fnlm <- function(x) { # Duans smearing est
       ind <-  ((10^(x))-0.1)*smrest
       return(ind)
@@ -631,7 +626,7 @@ for(d in depths){
       }
     }
     if(trans=="log"){
-      smrest <- mean(exp(pts.extcc@data$prop_t - pts.extcc@data$trainpredsadj))
+      smrest <- mean(exp(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
       bt.fnlm <- function(x) { # Duans smearing est
       ind <-  ((exp(x))-1)*smrest
       return(ind)
@@ -642,7 +637,7 @@ for(d in depths){
       }
       }
     if(trans=="sqrt"){
-      smrest <- mean((pts.extcc@data$prop_t - pts.extcc@data$trainpredsadj)^2)
+      smrest <- mean((pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj)^2)
       bt.fnlm <- function(x) { # Duans smearing est
       ind <-  (x^2)*smrest
       return(ind)

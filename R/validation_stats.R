@@ -27,13 +27,13 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     n <- length(pts.extpcv[,1])
     RMSE <- sqrt(mean((pts.extpcv$prop_t - pts.extpcv$pcvpred)^2, na.rm=TRUE))
     Rsq <- 1-var(pts.extpcv$prop_t - pts.extpcv$pcvpred, na.rm=TRUE)/var(pts.extpcv$prop_t, na.rm=TRUE)
-    if("foldRSq"%in%colnames(pts.extpcv)){Rsqvar <- var(unique(pts.extpcv$foldRsq), na.rm=TRUE)}else{Rsqvar <- 'NA'}
+    if("foldRsq"%in%colnames(pts.extpcv)){Rsqvar <- var(unique(pts.extpcv$foldRsq), na.rm=TRUE)}else{Rsqvar <- 'NA'}
     Rsqpre <- 1-var(pts.extpcv$prop_t - pts.extpcv$pcvpredpre, na.rm=TRUE)/var(pts.extpcv$prop_t, na.rm=TRUE)
     Bias <- mean(pts.extpcv$prop_t - pts.extpcv$pcvpred, na.rm=TRUE)/mean(pts.extpcv$prop_t, na.rm=T)
     ## Back transformed: create pcvpred_bt even if not tranformed for cv.depth function: Using Duan's smearing estimator
-    if(trans=="log10") {pts.extpcv$pcvpred_bt <- (10^(pts.extpcv$pcvpred) - 0.1)*(mean(10^(pts.extpcv$prop_t - pts.extpcv$trainpredsadj)))}
-    if(trans=="log") {pts.extpcv$pcvpred_bt <- (exp(pts.extpcv$pcvpred) - 1)*(mean(exp(pts.extpcv$prop_t - pts.extpcv$trainpredsadj)))}
-    if(trans=="sqrt") {pts.extpcv$pcvpred_bt <- ((pts.extpcv$pcvpred)^2)*(mean((pts.extpcv$prop_t - pts.extpcv$trainpredsadj)^2))}
+    if(trans=="log10") {pts.extpcv$pcvpred_bt <- (10^(pts.extpcv$pcvpred) - 0.1)*(mean(10^(pts.extpcv$prop_t - pts.extpcv$pcvpred)))}
+    if(trans=="log") {pts.extpcv$pcvpred_bt <- (exp(pts.extpcv$pcvpred) - 1)*(mean(exp(pts.extpcv$prop_t - pts.extpcv$pcvpred)))}
+    if(trans=="sqrt") {pts.extpcv$pcvpred_bt <- ((pts.extpcv$pcvpred)^2)*(mean((pts.extpcv$prop_t - pts.extpcv$pcvpred)^2))}
     if(trans=="none") {pts.extpcv$pcvpred_bt <- pts.extpcv$pcvpred}
     ## Untransformed calcs
     RMSE_bt <- sqrt(mean((pts.extpcv$prop - pts.extpcv$pcvpred_bt)^2, na.rm=TRUE))

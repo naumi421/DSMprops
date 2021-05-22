@@ -262,10 +262,8 @@ for(d in depths){
   gRPI.n <- length(pts.gRPI$RPI)
   RPIg_df <- data.frame(gRPI.ave,gRPI.med,gRPI.n)
   write.table(RPIg_df, paste(predfolder,"/gRPI_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
-  ## Match best CV scheme using gRPI
-  gRPIall <- ave(gRPI.ave,gRPI.med)
 
-
+  ######### Match best CV scheme using gRPI.ave
   ## Normal 10-fold cross validation
   cv10f <- DSMprops::CVranger(x = pts.extcc@data, fm = formulaStringRF, train.params = trn.params,
                               nfolds = 10, nthreads = 60, os = "linux") # 5min
@@ -290,7 +288,7 @@ for(d in depths){
   ## Validation metrics for CVs at different spatial supports
   valmets_sCV <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, prop = prop, depth = d)
   valmets_sCV$RPIall <- (valmets_sCV$RPI.cvave + valmets_sCV$RPI.cvmed) / 2
-  idx_val <- which(abs(valmets_sCV$RPIall-gRPIall)==min(abs(valmets_sCV$RPIall-gRPIall)))
+  idx_val <- which(abs(valmets_sCV$RPI.cvave-gRPI.ave)==min(abs(valmets_sCV$RPI.cvave-gRPI.ave)))
   bestval <- valmets_sCV[idx_val,c("valtype")]
   bestvalpts <- get(bestval)
   valmets_sCV$bestval <- bestval
@@ -602,7 +600,7 @@ for(d in depths){
   } else {
     ## Back transformation Stuff
     if(trans=="log10"){
-      smrest <- mean(10^(pts.extcc@data$prop_t - pts.extcc@data$trainpredsadj))
+      smrest <- mean(10^(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
       bt.fnlm <- function(x) { # Duans smearing est
       ind <-  ((10^(x))-0.1)*smrest
       return(ind)
@@ -613,7 +611,7 @@ for(d in depths){
       }
     }
     if(trans=="log"){
-      smrest <- mean(exp(pts.extcc@data$prop_t - pts.extcc@data$trainpredsadj))
+      smrest <- mean(exp(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
       bt.fnlm <- function(x) { # Duans smearing est
       ind <-  ((exp(x))-1)*smrest
       return(ind)
@@ -624,7 +622,7 @@ for(d in depths){
       }
       }
     if(trans=="sqrt"){
-      smrest <- mean((pts.extcc@data$prop_t - pts.extcc@data$trainpredsadj)^2)
+      smrest <- mean((pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj)^2)
       bt.fnlm <- function(x) { # Duans smearing est
       ind <-  (x^2)*smrest
       return(ind)
