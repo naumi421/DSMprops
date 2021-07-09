@@ -27,20 +27,20 @@ ptsfolder <- "/push/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
 
 ######## Load soil profile collection ##############
 ## Geographic coordinate quality levels
-pts_geocode <- readRDS("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/geocode_weighting.RDS") # From Dave White
-# pts_geocode_wt <- readRDS("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
+pts_geocode <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/geocode_weighting.RDS") # From Dave White
+# pts_geocode_wt <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
 pts_geocode$geo_wt <- pts_geocode$wt
 pts_geocode$wt <- NULL
 pts_geocode$peiid <- as.character(pts_geocode$peiid)
 # ## Pedon quality clases and weights
-# pts_qual_cls <- readRDS("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/pedonquality_weighting.RDS") # Dave White
+# pts_qual_cls <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/pedonquality_weighting.RDS") # Dave White
 # pts_qual_cls <- pts_qual_cls[!duplicated(pts_qual_cls$peiid),]
 ## Pedons with extracted SSUGO component data
 pts <- readRDS(paste(ptsfolder,"/NASIS_all_component_horizon_match_SPC_ssurgo20.rds",sep=""))
 pts.proj <- proj4string(pts)
 n.pts <- pts@site
 ## Bring in orig nasis points to eliminate those with partial coords
-load("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/nasis_sites_20210325.RData")
+load("/push/Hyb100m_gdrv/2020_Pedons/nasis_sites_20210325.RData") # object s
 s$latnchar <- nchar(abs(s$y_std))
 s$longnchar <- nchar(abs(s$x_std))
 s <- subset(s, s$latnchar > 5 & s$longnchar > 6)
@@ -80,19 +80,24 @@ n.pts <- n.pts[polybound,]
 # pts.gRPI <- DSMprops::parPTextr(sp = pts.gRPI, gridlist = cov.grids, os = "linux",nthreads = 50)
 # pts.gRPI <- na.omit(pts.gRPI)
 # ## Save points
-# saveRDS(pts.gRPI, paste(ptsfolder,"/CONUS_random_gRPIsamp.rds",sep=""))
+# saveRDS(pts.gRPI, paste(ptsfolder,"/CONUS_random_gRPIsamp_spatcovs.rds",sep=""))
 ## Updated extract for CONUS
-pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp.rds",sep=""))
+pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp_spatcovs.rds",sep=""))
 
 
 ## Parallelized extract for nasis points: (larger datasets)
 # rasterOptions(maxmemory = 4e+09)
 # pts.ext <- DSMprops::parPTextr(sp = n.pts, gridlist = cov.grids, os = "linux",nthreads = 50)
 # ## Save points
-# saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_extracted.rds",sep=""))
+# saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_extracted_spatcovs.rds",sep=""))
 ## Updated extract for CONUS
-pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_extracted.rds",sep=""))
+pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_extracted_spatcovs.rds",sep=""))
 pts.ext <- left_join(pts.ext, pts_geocode, by = "peiid")
+s$peiid <- as.character(s$peiid)
+pts.ext <- left_join(pts.ext, s[,c("peiid","obsdate","obsdatekind")], by = "peiid")
+pts.ext$obsdate <- as.Date(pts.ext$obsdate)
+pts.ext$geo_wt <- ifelse(pts.ext$geo_wt==8 & pts.ext$obsdate > "2000-01-01" & pts.ext$obsdatekind == "actual site observation date",
+                         7,pts.ext$geo_wt)
 pts.ext$geo_wt <- ifelse(is.na(pts.ext$geo_wt),8,pts.ext$geo_wt) # 18.8k NAs put in class 8
 
 ## Weed out duplicates
@@ -116,7 +121,7 @@ datastretchlab <- paste(datastretch,"x",sep="")
 
 ##### Load and prep SCD data
 ## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
-con <- dbConnect(RSQLite::SQLite(), "/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
+con <- dbConnect(RSQLite::SQLite(), "/push/Hyb100m_gdrv/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
 (ldm_names <- dbListTables(con))
 ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
 names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy")
@@ -127,6 +132,7 @@ scd.hor <- inner_join(ldm$NCSS_Layer,ldm$PSDA_and_Rock_Fragments[!duplicated(ldm
 ldm$NCSS_Pedon_Taxonomy$peiid <- ldm$NCSS_Pedon_Taxonomy$pedoniid
 scd.pts <- ldm$NCSS_Site_Location
 scd.pts <- left_join(scd.pts,ldm$NCSS_Pedon_Taxonomy[ldm$NCSS_Pedon_Taxonomy$site_key %in% scd.pts$site_key, c("site_key","peiid")], by="site_key")
+
 
 # ### SCD prep: Weed out points with imprecise coordinates ###
 scd.pts$latnchar <- nchar(abs(scd.pts$latitude_decimal))
@@ -149,16 +155,17 @@ scd.pts <- scd.pts[polybound,]
 ## Extract covariates for prediction onto SCD points
 # scd.pts.ext <- DSMprops::parPTextr(scd.pts, cov.grids, os = "linux", nthreads=50)
 # ## Save scd pts with extraction
-# saveRDS(scd.pts.ext, paste(predfolder,"/SCD","_extracted.rds",sep=""))
-scd.pts.ext <- readRDS(paste(predfolder,"/SCD","_extracted.rds",sep=""))
+# saveRDS(scd.pts.ext, paste(predfolder,"/SCD","_extracted_spatcovs.rds",sep=""))
+scd.pts.ext <- readRDS(paste(predfolder,"/SCD","_extracted_spatcovs.rds",sep=""))
 ## Create geo-coordinate quality weights
 scd.pts.ext$date <- as.Date(scd.pts.ext$site_obsdate, format = "%m/%d/%Y")
 scd.pts.ext$decdate <- lubridate::decimal_date(scd.pts.ext$date)
 scd.pts.ext$peiid <- as.character(scd.pts.ext$peiid)
 scd.pts.ext <- left_join(scd.pts.ext, pts_geocode, by="peiid")
 scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt) & scd.pts.ext$date >= "2010-01-01", 6, scd.pts.ext$geo_wt)
-scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt) & scd.pts.ext$date >= "2005-01-01", 7, scd.pts.ext$geo_wt)
+scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt) & scd.pts.ext$date >= "2000-01-01", 7, scd.pts.ext$geo_wt)
 scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt), 8, scd.pts.ext$geo_wt) ## Awful lot of class 8s...
+scd.pts.ext$geo_wt <- ifelse(scd.pts.ext$geo_wt == 8 & scd.pts.ext$date >= "2000-01-01", 7, scd.pts.ext$geo_wt) #updated 7/8/21
 
 ## Now join scd.hor to scd.pts and get rid of any duplicates
 scd.pts.ext.hor <- inner_join(scd.hor,scd.pts.ext, by="site_key")
@@ -192,7 +199,7 @@ img10kfid <- img10kf
 values(img10kfid) <- 1:ncell(img10kfid)
 img10kfid <- overlay(stack(img10kfid,img10kf),fun=function(a,b){a*b})
 ## Bring in feature space weights reference distributions
-ft_wts_ref <- readRDS("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/ref_df.RDS") # From Stephen Roecker, 5/3/2021
+ft_wts_ref <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/ref_df.RDS") # From Stephen Roecker, 5/3/2021
 
 ##### Loop to train and predict properties for all depths
 depths <- c(0,5,15,30,60,100,150)
@@ -252,7 +259,7 @@ for(d in depths){
   ## Determine 95% interquartile range for relative prediction interval
   varrange_gRPI <- as.numeric(quantile(pts.extcc@data$prop, probs=c(0.975), na.rm=T)-quantile(pts.extcc@data$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
   gRPI_rf <- ranger(formulaStringRF, data=pts.extcc@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 60,
-                    min.node.size = trn.params$min.node.size)
+                    min.node.size = trn.params$min.node.size, importance = "impurity")
   ## Predict onto random gRPI sample pts
   pts.gRPI$lowpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.025))$predictions
   pts.gRPI$highpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.975))$predictions
@@ -303,14 +310,18 @@ for(d in depths){
   geo_vec <- c("gps","gps_gps2","gps_gps2_gps3", "gps_gps2_gps3_unk")
   srce_vec <- c("scd","scd_direct","scd_direct_home","scd_direct_home_adjacent")
   grid_vec <- expand.grid(geo=geo_vec, srce=srce_vec, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
+  #TODO: pull out train sets with only scd gps and gps2
+  grid_vec <- grid_vec[!(grid_vec$srce=="scd"&grid_vec$geo=="gps"),]
+  grid_vec <- grid_vec[!(grid_vec$srce=="scd"&grid_vec$geo=="gps_gps2"),]
   CV_grid_fn <- function(x){
     levs <- data.frame(grid_vec[x,])
     colnames(levs) <- colnames(grid_vec)
     geo_levs <- str_split(levs$geo, "_")[[1]]
     srce_levs <- str_split(levs$srce, "_")[[1]]
     ptseval <- pts.extcc
-    ptseval <- ptseval[ptseval@data$geo_cls %in% geo_levs,]
     ptseval <- ptseval[ptseval@data$mtchtype %in% srce_levs,]
+    # subset by geolevels, but leave in all scd since 2000 as the baseline training/evaluation data
+    ptseval <- ptseval[(ptseval@data$mtchtype=="scd"&ptseval@data$geo_wt<8)|(ptseval@data$geo_cls %in% geo_levs),]
     nfolds <- 10
     resol <- resol_rpi # kilometers
     ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
@@ -326,7 +337,7 @@ for(d in depths){
   ## Subset CVs to recent scd points
   CV_grid_lst_scd_gps <- lapply(1:length(CV_grid_lst),function(x){
     df <- CV_grid_lst[[x]]
-    df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"),]
+    df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"|df$geo_cls=="gps3"),]
     return(df)
   })
   CV_grid_lst_scd_all <- lapply(1:length(CV_grid_lst),function(x){
@@ -361,7 +372,7 @@ for(d in depths){
   geo_params <- model_params[(match("geo",model_params)+1):(match("srce",model_params)-1)]
   ## Subset training points to new optimized dataset
   pts.pcv <- pts.extcc[pts.extcc$mtchtype %in% srce_params,]
-  pts.pcv <- pts.pcv[pts.pcv$geo_cls %in% geo_params,]
+  pts.pcv <- pts.pcv[(pts.pcv$mtchtype=="scd"&pts.pcv$geo_wt<8)|(pts.pcv$geo_cls %in% geo_params),] # subset, but leave scd > 2000
 
   ## Characterize pt density for case weights
   polywin    <- as(polybound, "owin")
@@ -428,7 +439,7 @@ for(d in depths){
   ## Subset CVs to recent scd points
   CV_wts_grid_lst_scd_gps <- lapply(1:length(CV_wts_grid_lst),function(x){
     df <- CV_wts_grid_lst[[x]]
-    df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"),]
+    df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"|df$geo_cls=="gps3"),]
     return(df)
   })
   CV_wts_grid_lst_scd_all <- lapply(1:length(CV_wts_grid_lst),function(x){
@@ -515,9 +526,12 @@ for(d in depths){
   ## Train global ranger model
   rf.qrf <- ranger(formulaStringRF, data=pts.pcv@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 60,
                    min.node.size = trn.params$min.node.size,
-                   case.weights = pts.pcv$tot_wts)
+                   case.weights = pts.pcv$tot_wts, importance = "impurity")
   ## OOB error
   # rf.qrf
+  ## Peak at importance
+  imp <- data.frame(var=names(importance(rf.qrf)),imp_meas = unname(importance(rf.qrf)))
+  imp[order(imp$imp_meas, decreasing = T),][1:30,]
   ## Linear Adjustment for bias in low and high predictions
   pts.pcv@data$trainpreds <- predict(rf.qrf, data=pts.pcv@data, num.threads = 60)$predictions
   attach(pts.pcv@data)
