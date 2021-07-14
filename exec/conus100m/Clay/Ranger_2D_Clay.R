@@ -390,106 +390,107 @@ for(d in depths){
   writeRaster(Qd.rast, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",d,"_ptdensity_per_cell.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
   names(Qd.rast) <- "ptspercell"
   pts.pcv <- extract(Qd.rast, pts.pcv, df=T, sp=T)
-  ## Create spatial density based weights: better way to do this??
-  pts.pcv@data$sp_wts <- (1-(pts.pcv@data$ptspercell / (max(pts.pcv@data$ptspercell)*1.1)))^5
-  ## Feature space weights
-  vars <- c("SLPNED6", "POSNED6", "EVI", "PPT", "TEMP")
-  p1 <- seq(0, 1, 0.1)
-  p2 <- seq(0, 1, 0.5)
-  probs <- list(p1, p2, p1, p1, p1, NULL)
-  names(probs) <- vars
-  pts.pcv@data$feat_wts <- DSMprops::feat_wts(ref_df = ft_wts_ref, obs_df = pts.pcv@data, vars, probs)$wts # ~700 NAs for d = 0
-  pts.pcv@data$feat_wts <- ifelse(is.na(pts.pcv@data$feat_wts), median(pts.pcv@data$feat_wts, na.rm=T), pts.pcv@data$feat_wts) # Stopgap for NAs created
-  pts.pcv@data$feat_wts <- pts.pcv@data$feat_wts / max(pts.pcv@data$feat_wts, na.rm = T) # Scale 0-1
-  ## Combined sample weights: better way to do?
-  pts.pcv@data$tot_wts <- pts.pcv@data$sp_wts * pts.pcv@data$feat_wts
-
-  ######## Test for case weights schemes
-  ## Now prepare a case.weights grid search using the chosen cross validation approach
-  feat_vec <- c("full","mid","none")
-  sp_vec <- c("full","mid","none")
-  grid_vec <- expand.grid(feat=feat_vec, spat=sp_vec, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
-  CV_wts_grid_fn <- function(x){
-    levs <- data.frame(grid_vec[x,])
-    colnames(levs) <- colnames(grid_vec)
-    ptseval <- pts.pcv
-    if(levs$feat == "mid"){ptseval@data$feat_wts <- ptseval@data$feat_wts^(1/7)}
-    if(levs$feat == "none"){ptseval@data$feat_wts <- 1}
-    if(levs$spat == "mid"){ptseval@data$sp_wts <- sqrt(ptseval@data$sp_wts)}
-    if(levs$spat == "none"){ptseval@data$sp_wts <- 1}
-    nfolds <- 10
-    resol <- resol_rpi # kilometers
-    ptseval@data$tot_wts <- ptseval@data$feat_wts * ptseval@data$sp_wts
-    # ptsevalsamp <- sample(ptseval@data$peiid, size = floor(0.75 * nrow(ptseval@data)), prob = ptseval@data$tot_wts)
-    # ptseval <- ptseval[ptseval@data$peiid %in% ptsevalsamp,]
-    # ptseval@data$tot_wts <- NULL
-    # ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
-    #                                     rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux")
-    ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
-                                        rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux", casewts = "tot_wts")
-    ptsevalcv$cvgrid <- paste(colnames(levs),levs[1,],collapse="_",sep="_")
-    return(ptsevalcv)
-  }
-  ## List apply implementation
-  Sys.time()
-  CV_wts_grid_lst <- lapply(1:nrow(grid_vec),CV_wts_grid_fn)
-  Sys.time()
-  #saveRDS(CV_wts_grid_lst,paste(predfolder,"/CV_wts_grid_lst_", prop, '_',d, "_cm.rds",sep="")) # takes forever
-  ## Validation metrics for CVs with different case weighting schemes
-  ## Subset CVs to recent scd points
-  CV_wts_grid_lst_scd_gps <- lapply(1:length(CV_wts_grid_lst),function(x){
-    df <- CV_wts_grid_lst[[x]]
-    df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"|df$geo_cls=="gps3"),]
-    return(df)
-  })
-  CV_wts_grid_lst_scd_all <- lapply(1:length(CV_wts_grid_lst),function(x){
-    df <- CV_wts_grid_lst[[x]]
-    df <- df[df$mtchtype=="scd",]
-    return(df)
-  })
-  ## Validation metrics for CVs with different case weighting schemes
-  Grid_wt_valmets <- DSMprops::valmetrics(xlst = CV_wts_grid_lst, trans = trans, prop = prop, depth = d)
-  Grid_wt_valmets_scd_gps <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_gps, trans = trans, prop = prop, depth = d)
-  Grid_wt_valmets_scd_all <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_all, trans = trans, prop = prop, depth = d)
-  wt_valmets_rank <- data.frame( cvgrid = Grid_wt_valmets$cvgrid, Rsq.all = Grid_wt_valmets$Rsq, RPI.all = Grid_wt_valmets$RPI.cvave,
-                              Rsq.scd = Grid_wt_valmets_scd_all$Rsq, Rsq.gscd = Grid_wt_valmets_scd_gps$Rsq, QRMSE.gscd = Grid_wt_valmets$QRMSE,
-                              QMedAE.gscd = Grid_wt_valmets_scd_gps$QMedAE, n = Grid_wt_valmets$n)
-  Grid_wt_valmets_lst <- list(Grid_wt_valmets,Grid_wt_valmets_scd_gps,Grid_wt_valmets_scd_all,wt_valmets_rank)
-  names(Grid_wt_valmets_lst) <- c("Grid_wt_valmets","Grid_wt_valmets_scd_gps","Grid_wt_valmets_scd_all","wt_valmets_rank")
-  saveRDS(Grid_wt_valmets_lst,paste(predfolder,"/CV_wts_grid_wt_valmets_", prop, '_',d, "_cm.rds",sep=""))
-  ## Now pick model mode ranking on multiple criteria
-  wt_valmets_rank$RPI.cvave.rnk <- rank(wt_valmets_rank$RPI.all,ties.method = "average")
-  wt_valmets_rank$QRMSE.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QRMSE.gscd,ties.method = "average")
-  wt_valmets_rank$QMedAE.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QMedAE.gscd,ties.method = "average")
-  wt_valmets_rank$Rsq.scd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.scd,ties.method = "average")
-  wt_valmets_rank$Rsq.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.gscd,ties.method = "average")
-  wt_valmets_rank$Rsq.all.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.all,ties.method = "average")
-  wt_valmets_rank$rank_ave <- apply(wt_valmets_rank[,c("RPI.cvave.rnk","QRMSE.gscd.rnk","QMedAE.gscd.rnk",
-                                                 "Rsq.scd.rnk","Rsq.gscd.rnk","Rsq.all.rnk")], MARGIN = 1, FUN=mean)
-  wt_valmets_rank$rank_final <- rank(wt_valmets_rank$rank_ave,ties.method = "random")
-  write.table(wt_valmets_rank, paste(predfolder,"/Grid_wt_valmets_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
-
-  ## Pick out CV matrix to save and plot with
-  idx_wts_val <- which(wt_valmets_rank$rank_final==1)
-  #bestwtval <- wt_valmets_rank[idx_val,c("cvgrid")]
-  bestvalwtpts <- CV_wts_grid_lst[[idx_wts_val]]
-  saveRDS(bestvalwtpts,paste(predfolder,"/CV_finalwts_best_pts_", prop, '_',d, "_cm.rds",sep=""))
-
-  ## Now set up final case weights based on grid search
-  model_params <- str_split(wt_valmets_rank[wt_valmets_rank$rank_final==min(wt_valmets_rank$rank_final),c("cvgrid")][1],"_")[[1]]
-  spat_param <- model_params[(match("spat",model_params)+1):length(model_params)]
-  feat_param <- model_params[(match("feat",model_params)+1):(match("spat",model_params)-1)]
-  ## Adjust weights according to chosen model
-  pts.pcv@data <- dplyr::mutate(pts.pcv@data, sp_wts = ifelse(spat_param == "mid",sqrt(sp_wts),sp_wts),
-                                sp_wts = ifelse(spat_param == "none",1,sp_wts)) # spatial wts
-  pts.pcv@data <- dplyr::mutate(pts.pcv@data, feat_wts = ifelse(feat_param == "mid",feat_wts^(1/7),feat_wts),
-                                feat_wts = ifelse(feat_param == "none",1,feat_wts)) # feat wts
+  # ## Create spatial density based weights: better way to do this??
+  # pts.pcv@data$sp_wts <- (1-(pts.pcv@data$ptspercell / (max(pts.pcv@data$ptspercell)*1.1)))^5
+  # ## Feature space weights
+  # vars <- c("SLPNED6", "POSNED6", "EVI", "PPT", "TEMP")
+  # p1 <- seq(0, 1, 0.1)
+  # p2 <- seq(0, 1, 0.5)
+  # probs <- list(p1, p2, p1, p1, p1, NULL)
+  # names(probs) <- vars
+  # pts.pcv@data$feat_wts <- DSMprops::feat_wts(ref_df = ft_wts_ref, obs_df = pts.pcv@data, vars, probs)$wts # ~700 NAs for d = 0
+  # pts.pcv@data$feat_wts <- ifelse(is.na(pts.pcv@data$feat_wts), median(pts.pcv@data$feat_wts, na.rm=T), pts.pcv@data$feat_wts) # Stopgap for NAs created
+  # pts.pcv@data$feat_wts <- pts.pcv@data$feat_wts / max(pts.pcv@data$feat_wts, na.rm = T) # Scale 0-1
+  # ## Combined sample weights: better way to do?
+  # pts.pcv@data$tot_wts <- pts.pcv@data$sp_wts * pts.pcv@data$feat_wts
+  #
+  # ######## Test for case weights schemes
+  # ## Now prepare a case.weights grid search using the chosen cross validation approach
+  # feat_vec <- c("full","mid","none")
+  # sp_vec <- c("full","mid","none")
+  # grid_vec <- expand.grid(feat=feat_vec, spat=sp_vec, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
+  # CV_wts_grid_fn <- function(x){
+  #   levs <- data.frame(grid_vec[x,])
+  #   colnames(levs) <- colnames(grid_vec)
+  #   ptseval <- pts.pcv
+  #   if(levs$feat == "mid"){ptseval@data$feat_wts <- ptseval@data$feat_wts^(1/7)}
+  #   if(levs$feat == "none"){ptseval@data$feat_wts <- 1}
+  #   if(levs$spat == "mid"){ptseval@data$sp_wts <- sqrt(ptseval@data$sp_wts)}
+  #   if(levs$spat == "none"){ptseval@data$sp_wts <- 1}
+  #   nfolds <- 10
+  #   resol <- resol_rpi # kilometers
+  #   ptseval@data$tot_wts <- ptseval@data$feat_wts * ptseval@data$sp_wts
+  #   # ptsevalsamp <- sample(ptseval@data$peiid, size = floor(0.75 * nrow(ptseval@data)), prob = ptseval@data$tot_wts)
+  #   # ptseval <- ptseval[ptseval@data$peiid %in% ptsevalsamp,]
+  #   # ptseval@data$tot_wts <- NULL
+  #   # ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
+  #   #                                     rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux")
+  #   ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
+  #                                       rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux", casewts = "tot_wts")
+  #   ptsevalcv$cvgrid <- paste(colnames(levs),levs[1,],collapse="_",sep="_")
+  #   return(ptsevalcv)
+  # }
+  # ## List apply implementation
+  # Sys.time()
+  # CV_wts_grid_lst <- lapply(1:nrow(grid_vec),CV_wts_grid_fn)
+  # Sys.time()
+  # #saveRDS(CV_wts_grid_lst,paste(predfolder,"/CV_wts_grid_lst_", prop, '_',d, "_cm.rds",sep="")) # takes forever
+  # ## Validation metrics for CVs with different case weighting schemes
+  # ## Subset CVs to recent scd points
+  # CV_wts_grid_lst_scd_gps <- lapply(1:length(CV_wts_grid_lst),function(x){
+  #   df <- CV_wts_grid_lst[[x]]
+  #   df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"|df$geo_cls=="gps3"),]
+  #   return(df)
+  # })
+  # CV_wts_grid_lst_scd_all <- lapply(1:length(CV_wts_grid_lst),function(x){
+  #   df <- CV_wts_grid_lst[[x]]
+  #   df <- df[df$mtchtype=="scd",]
+  #   return(df)
+  # })
+  # ## Validation metrics for CVs with different case weighting schemes
+  # Grid_wt_valmets <- DSMprops::valmetrics(xlst = CV_wts_grid_lst, trans = trans, prop = prop, depth = d)
+  # Grid_wt_valmets_scd_gps <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_gps, trans = trans, prop = prop, depth = d)
+  # Grid_wt_valmets_scd_all <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_all, trans = trans, prop = prop, depth = d)
+  # wt_valmets_rank <- data.frame( cvgrid = Grid_wt_valmets$cvgrid, Rsq.all = Grid_wt_valmets$Rsq, RPI.all = Grid_wt_valmets$RPI.cvave,
+  #                             Rsq.scd = Grid_wt_valmets_scd_all$Rsq, Rsq.gscd = Grid_wt_valmets_scd_gps$Rsq, QRMSE.gscd = Grid_wt_valmets$QRMSE,
+  #                             QMedAE.gscd = Grid_wt_valmets_scd_gps$QMedAE, n = Grid_wt_valmets$n)
+  # Grid_wt_valmets_lst <- list(Grid_wt_valmets,Grid_wt_valmets_scd_gps,Grid_wt_valmets_scd_all,wt_valmets_rank)
+  # names(Grid_wt_valmets_lst) <- c("Grid_wt_valmets","Grid_wt_valmets_scd_gps","Grid_wt_valmets_scd_all","wt_valmets_rank")
+  # saveRDS(Grid_wt_valmets_lst,paste(predfolder,"/CV_wts_grid_wt_valmets_", prop, '_',d, "_cm.rds",sep=""))
+  # ## Now pick model mode ranking on multiple criteria
+  # wt_valmets_rank$RPI.cvave.rnk <- rank(wt_valmets_rank$RPI.all,ties.method = "average")
+  # wt_valmets_rank$QRMSE.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QRMSE.gscd,ties.method = "average")
+  # wt_valmets_rank$QMedAE.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QMedAE.gscd,ties.method = "average")
+  # wt_valmets_rank$Rsq.scd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.scd,ties.method = "average")
+  # wt_valmets_rank$Rsq.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.gscd,ties.method = "average")
+  # wt_valmets_rank$Rsq.all.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.all,ties.method = "average")
+  # wt_valmets_rank$rank_ave <- apply(wt_valmets_rank[,c("RPI.cvave.rnk","QRMSE.gscd.rnk","QMedAE.gscd.rnk",
+  #                                                "Rsq.scd.rnk","Rsq.gscd.rnk","Rsq.all.rnk")], MARGIN = 1, FUN=mean)
+  # wt_valmets_rank$rank_final <- rank(wt_valmets_rank$rank_ave,ties.method = "random")
+  # write.table(wt_valmets_rank, paste(predfolder,"/Grid_wt_valmets_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
+  #
+  # ## Pick out CV matrix to save and plot with
+  # idx_wts_val <- which(wt_valmets_rank$rank_final==1)
+  # #bestwtval <- wt_valmets_rank[idx_val,c("cvgrid")]
+  # bestvalwtpts <- CV_wts_grid_lst[[idx_wts_val]]
+  # saveRDS(bestvalwtpts,paste(predfolder,"/CV_finalwts_best_pts_", prop, '_',d, "_cm.rds",sep=""))
+  #
+  # ## Now set up final case weights based on grid search
+  # model_params <- str_split(wt_valmets_rank[wt_valmets_rank$rank_final==min(wt_valmets_rank$rank_final),c("cvgrid")][1],"_")[[1]]
+  # spat_param <- model_params[(match("spat",model_params)+1):length(model_params)]
+  # feat_param <- model_params[(match("feat",model_params)+1):(match("spat",model_params)-1)]
+  # ## Adjust weights according to chosen model
+  # pts.pcv@data <- dplyr::mutate(pts.pcv@data, sp_wts = ifelse(spat_param == "mid",sqrt(sp_wts),sp_wts),
+  #                               sp_wts = ifelse(spat_param == "none",1,sp_wts)) # spatial wts
+  # pts.pcv@data <- dplyr::mutate(pts.pcv@data, feat_wts = ifelse(feat_param == "mid",feat_wts^(1/7),feat_wts),
+  #                               feat_wts = ifelse(feat_param == "none",1,feat_wts)) # feat wts
   ## Save training points file
   saveRDS(pts.pcv, paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
   #pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
 
   ###### Cross validation plots
   ## All data
+  bestvalwtpts <- bestvalpts # temp fix when excluding weights 7/12/2021
   viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
   scaleFUN <- function(x) round(x,0)
   gplt.dcm.2D.CV <- ggplot(data=bestvalwtpts, aes(prop_t, pcvpred)) +
@@ -508,7 +509,7 @@ for(d in depths){
   #gplt.dcm.2D.CV.SCD
   ggsave(paste(predfolder,'/ValPlot_1to1_scd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.SCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
   ## Now just with SCD pedons with GPS or after 2010
-  gplt.dcm.2D.CV.gSCD <- ggplot(data=bestvalwtpts[bestvalwtpts$mtchtype=="scd"&(bestvalwtpts$geo_cls=="gps"|bestvalwtpts$geo_cls=="gps2"),], aes(prop_t, pcvpred)) +
+  gplt.dcm.2D.CV.gSCD <- ggplot(data=bestvalwtpts[bestvalwtpts$mtchtype=="scd"&(bestvalwtpts$geo_cls=="gps"|bestvalwtpts$geo_cls=="gps2"|bestvalwtpts$geo_cls=="gps3"),], aes(prop_t, pcvpred)) +
     stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1)  + #xlim(-5,105) + ylim(-5,105) +
     theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
     xlab("gps SCD Measured") + ylab("CV Prediction") + scale_fill_gradientn( name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
@@ -526,12 +527,12 @@ for(d in depths){
   ## Train global ranger model
   rf.qrf <- ranger(formulaStringRF, data=pts.pcv@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 60,
                    min.node.size = trn.params$min.node.size,
-                   case.weights = pts.pcv$tot_wts, importance = "impurity")
+                  importance = "impurity") #case.weights = pts.pcv$tot_wts,
   ## OOB error
   # rf.qrf
   ## Peak at importance
-  imp <- data.frame(var=names(importance(rf.qrf)),imp_meas = unname(importance(rf.qrf)))
-  imp[order(imp$imp_meas, decreasing = T),][1:30,]
+  # imp <- data.frame(var=names(importance(rf.qrf)),imp_meas = unname(importance(rf.qrf)))
+  # imp[order(imp$imp_meas, decreasing = T),][1:30,]
   ## Linear Adjustment for bias in low and high predictions
   pts.pcv@data$trainpreds <- predict(rf.qrf, data=pts.pcv@data, num.threads = 60)$predictions
   attach(pts.pcv@data)
@@ -548,137 +549,137 @@ for(d in depths){
 
   ############################## Raster Preditions ######################################################
   ##### Reference covar rasters to use in prediction
-  rasters <- stack(cov.grids)
-  #names(rasters)
-
-  ## Ranger Predict
-  predfun <- function(model, ...) predict(model, ...)$predictions
-  # TODO figure out why internal ranger parallelization did not seem to work.
-  # predtst <- predict(rasters, rf.qrf, fun=predfun, type="response", progress="text", num.threads = 50)
-
-
-  ## Predict onto covariate grid
-  ## Parallelized predict
-  rasterOptions(maxmemory = 7e+09,chunksize = 1e+09)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
-  beginCluster(50,type='SOCK')
-  Sys.time()
-  predl <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.025)),progress="text")
-  Sys.time()
-  predh <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.975)),progress="text")
-  Sys.time()
-  #pred <- predict(rasters, rf.qrf, fun=predfun, progress="text")
-  pred <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun), progress="text") # works ok
-  #pred <- clusterR(rasters, predict, args=list(model=soiclass),progress="text")
-  Sys.time()
-  ## End cluster to clear cache and memory
-  # endCluster()
-  # gc()
+  # rasters <- stack(cov.grids)
+  # #names(rasters)
+  #
+  # ## Ranger Predict
+  # predfun <- function(model, ...) predict(model, ...)$predictions
+  # # TODO figure out why internal ranger parallelization did not seem to work.
+  # # predtst <- predict(rasters, rf.qrf, fun=predfun, type="response", progress="text", num.threads = 50)
+  #
+  #
+  # ## Predict onto covariate grid
+  # ## Parallelized predict
+  # rasterOptions(maxmemory = 7e+09,chunksize = 1e+09)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
   # beginCluster(50,type='SOCK')
-  ## Rename for lm adjustment
-  names(pred) <- "trainpreds"
-  # ## Linear Adjustment
-  predlm <- clusterR(pred, predict, args=list(model=rf_lm_adj),progress="text")
-  ## Scale function for saving rasters as integers
-  rastscale.fn <- function(x) {
-    ind <- x*datastretch
-    ind <- ifelse(ind<0,0,ind)
-    return(ind)
-  }
-  ## Logic statement to handle transformed versus non transformed
-  if(trans=="none"){ # For models that have not been transformed
-    # ## PI widths
-    s <- stack(predh,predl)
-    # PIwidth.fn <- function(a,b) {
-    #   ind <- a-b
-    #   return(ind)
-    # }
-    # PIwidth <- clusterR(s, overlay, args=list(fun=PIwidth.fn),progress = "text")
-    # # Determine 95% interquantile range of original training data for horizons that include the depth being predicted
-    PIrelwidth.fn <- function(a,b) {
-      ind <- ((a-b)/varrange)*1000
-      return(ind)
-    }
-    PIrelwidth <- clusterR(s, overlay, args=list(fun=PIrelwidth.fn),progress = "text",export='varrange')
-    ## Rescale rasters for saving
-    predsc <- clusterR(pred, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-    predlmsc <- clusterR(predlm, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-    predlsc <- clusterR(predl, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-    predhsc <- clusterR(predh, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-    ## Write rasters
-    writeRaster(predsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-    writeRaster(predlmsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRFadj.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-    writeRaster(predlsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_l.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-    writeRaster(predhsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_h.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-    writeRaster(PIrelwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_1000x_",d,"_cm_2D_QRF_95PI_relwidth.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
-    # # writeRaster(PIwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",d,"_cm_2D_QRF_95PI_width.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
-  } else {
-    ## Back transformation Stuff
-    if(trans=="log10"){
-      smrest <- mean(10^(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
-      bt.fnlm <- function(x) { # Duans smearing est
-      ind <-  ((10^(x))-0.1)*smrest
-      return(ind)
-      }
-      bt.fn <- function(x) {
-        ind <-  (10^(x))-0.1
-        return(ind)
-      }
-    }
-    if(trans=="log"){
-      smrest <- mean(exp(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
-      bt.fnlm <- function(x) { # Duans smearing est
-      ind <-  ((exp(x))-1)*smrest
-      return(ind)
-      }
-      bt.fn <- function(x) {
-        ind <-  (exp(x))-1
-        return(ind)
-      }
-      }
-    if(trans=="sqrt"){
-      smrest <- mean((pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj)^2)
-      bt.fnlm <- function(x) { # Duans smearing est
-      ind <-  (x^2)*smrest
-      return(ind)
-      }
-      bt.fn <- function(x) {
-        ind <-  x^2
-        return(ind)
-      }
-      }
-    predh_bt <- clusterR(predh, calc, args=list(fun=bt.fn),progress='text')
-    predl_bt <- clusterR(predl, calc, args=list(fun=bt.fn),progress='text')
-    pred_bt <- clusterR(pred, calc, args=list(fun=bt.fn),progress='text')
-    predlm_bt <- clusterR(predlm, calc, args=list(fun=bt.fnlm),progress='text',export='smrest')
-    ## Stack PIs for RPI calculation
-    s_bt <- stack(predh_bt,predl_bt)
-    # PIwidth_bt.fn <- function(a,b) {
-    #   ind <- a-b
-    #   return(ind)
-    # }
-    # PIwidth_bt <- clusterR(s_bt, overlay, args=list(fun=PIwidth_bt.fn),progress = "text")
-    ## If transformed, use the following code for PI width prep steps
-    PIrelwidth_bt.fn <- function(a,b) {
-      ind <- ((a-b)/varrange)*100
-      ind <- ifelse(ind>65533,65533,ind)
-      return(ind)
-    }
-    PIrelwidth <- clusterR(s_bt, overlay, args=list(fun=PIrelwidth_bt.fn),progress = "text", export='varrange')
-    ## Rescale rasters for saving
-    pred_btsc <- clusterR(pred_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-    predlm_btsc <- clusterR(predlm_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-    predl_btsc <- clusterR(predl_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-    predh_btsc <- clusterR(predh_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-    ## Write rasters
-    writeRaster(pred_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-    writeRaster(predlm_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRFadj_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-    writeRaster(predl_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_l_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-    writeRaster(predh_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_h_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-    #writeRaster(PIwidth_bt, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_width_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
-    writeRaster(PIrelwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_100x_",d,"_cm_2D_QRF_95PI_relwidth_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
-  }
-  ## Close out raster cluster
-  endCluster()
+  # Sys.time()
+  # predl <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.025)),progress="text")
+  # Sys.time()
+  # predh <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.975)),progress="text")
+  # Sys.time()
+  # #pred <- predict(rasters, rf.qrf, fun=predfun, progress="text")
+  # pred <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun), progress="text") # works ok
+  # #pred <- clusterR(rasters, predict, args=list(model=soiclass),progress="text")
+  # Sys.time()
+  # ## End cluster to clear cache and memory
+  # # endCluster()
+  # # gc()
+  # # beginCluster(50,type='SOCK')
+  # ## Rename for lm adjustment
+  # names(pred) <- "trainpreds"
+  # # ## Linear Adjustment
+  # predlm <- clusterR(pred, predict, args=list(model=rf_lm_adj),progress="text")
+  # ## Scale function for saving rasters as integers
+  # rastscale.fn <- function(x) {
+  #   ind <- x*datastretch
+  #   ind <- ifelse(ind<0,0,ind)
+  #   return(ind)
+  # }
+  # ## Logic statement to handle transformed versus non transformed
+  # if(trans=="none"){ # For models that have not been transformed
+  #   # ## PI widths
+  #   s <- stack(predh,predl)
+  #   # PIwidth.fn <- function(a,b) {
+  #   #   ind <- a-b
+  #   #   return(ind)
+  #   # }
+  #   # PIwidth <- clusterR(s, overlay, args=list(fun=PIwidth.fn),progress = "text")
+  #   # # Determine 95% interquantile range of original training data for horizons that include the depth being predicted
+  #   PIrelwidth.fn <- function(a,b) {
+  #     ind <- ((a-b)/varrange)*1000
+  #     return(ind)
+  #   }
+  #   PIrelwidth <- clusterR(s, overlay, args=list(fun=PIrelwidth.fn),progress = "text",export='varrange')
+  #   ## Rescale rasters for saving
+  #   predsc <- clusterR(pred, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+  #   predlmsc <- clusterR(predlm, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+  #   predlsc <- clusterR(predl, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+  #   predhsc <- clusterR(predh, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+  #   ## Write rasters
+  #   writeRaster(predsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+  #   writeRaster(predlmsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRFadj.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+  #   writeRaster(predlsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_l.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+  #   writeRaster(predhsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_h.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+  #   writeRaster(PIrelwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_1000x_",d,"_cm_2D_QRF_95PI_relwidth.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
+  #   # # writeRaster(PIwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",d,"_cm_2D_QRF_95PI_width.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
+  # } else {
+  #   ## Back transformation Stuff
+  #   if(trans=="log10"){
+  #     smrest <- mean(10^(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
+  #     bt.fnlm <- function(x) { # Duans smearing est
+  #     ind <-  ((10^(x))-0.1)*smrest
+  #     return(ind)
+  #     }
+  #     bt.fn <- function(x) {
+  #       ind <-  (10^(x))-0.1
+  #       return(ind)
+  #     }
+  #   }
+  #   if(trans=="log"){
+  #     smrest <- mean(exp(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
+  #     bt.fnlm <- function(x) { # Duans smearing est
+  #     ind <-  ((exp(x))-1)*smrest
+  #     return(ind)
+  #     }
+  #     bt.fn <- function(x) {
+  #       ind <-  (exp(x))-1
+  #       return(ind)
+  #     }
+  #     }
+  #   if(trans=="sqrt"){
+  #     smrest <- mean((pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj)^2)
+  #     bt.fnlm <- function(x) { # Duans smearing est
+  #     ind <-  (x^2)*smrest
+  #     return(ind)
+  #     }
+  #     bt.fn <- function(x) {
+  #       ind <-  x^2
+  #       return(ind)
+  #     }
+  #     }
+  #   predh_bt <- clusterR(predh, calc, args=list(fun=bt.fn),progress='text')
+  #   predl_bt <- clusterR(predl, calc, args=list(fun=bt.fn),progress='text')
+  #   pred_bt <- clusterR(pred, calc, args=list(fun=bt.fn),progress='text')
+  #   predlm_bt <- clusterR(predlm, calc, args=list(fun=bt.fnlm),progress='text',export='smrest')
+  #   ## Stack PIs for RPI calculation
+  #   s_bt <- stack(predh_bt,predl_bt)
+  #   # PIwidth_bt.fn <- function(a,b) {
+  #   #   ind <- a-b
+  #   #   return(ind)
+  #   # }
+  #   # PIwidth_bt <- clusterR(s_bt, overlay, args=list(fun=PIwidth_bt.fn),progress = "text")
+  #   ## If transformed, use the following code for PI width prep steps
+  #   PIrelwidth_bt.fn <- function(a,b) {
+  #     ind <- ((a-b)/varrange)*100
+  #     ind <- ifelse(ind>65533,65533,ind)
+  #     return(ind)
+  #   }
+  #   PIrelwidth <- clusterR(s_bt, overlay, args=list(fun=PIrelwidth_bt.fn),progress = "text", export='varrange')
+  #   ## Rescale rasters for saving
+  #   pred_btsc <- clusterR(pred_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+  #   predlm_btsc <- clusterR(predlm_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+  #   predl_btsc <- clusterR(predl_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+  #   predh_btsc <- clusterR(predh_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+  #   ## Write rasters
+  #   writeRaster(pred_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+  #   writeRaster(predlm_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRFadj_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+  #   writeRaster(predl_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_l_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+  #   writeRaster(predh_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_h_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+  #   #writeRaster(PIwidth_bt, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_width_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
+  #   writeRaster(PIrelwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_100x_",d,"_cm_2D_QRF_95PI_relwidth_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
+  # }
+  # ## Close out raster cluster
+  # endCluster()
 
 
   ## Wrap up loop
