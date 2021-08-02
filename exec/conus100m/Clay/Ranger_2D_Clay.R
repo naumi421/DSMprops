@@ -133,7 +133,6 @@ ldm$NCSS_Pedon_Taxonomy$peiid <- ldm$NCSS_Pedon_Taxonomy$pedoniid
 scd.pts <- ldm$NCSS_Site_Location
 scd.pts <- left_join(scd.pts,ldm$NCSS_Pedon_Taxonomy[ldm$NCSS_Pedon_Taxonomy$site_key %in% scd.pts$site_key, c("site_key","peiid")], by="site_key")
 
-
 # ### SCD prep: Weed out points with imprecise coordinates ###
 scd.pts$latnchar <- nchar(abs(scd.pts$latitude_decimal))
 scd.pts$longnchar <- nchar(abs(scd.pts$longitude_decima))
@@ -486,7 +485,7 @@ for(d in depths){
   #                               feat_wts = ifelse(feat_param == "none",1,feat_wts)) # feat wts
   ## Save training points file
   saveRDS(pts.pcv, paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
-  #pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
+  pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
 
   ###### Cross validation plots
   ## All data
@@ -543,143 +542,143 @@ for(d in depths){
   saveRDS(rf.qrf, paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm.rds",sep=""))
   saveRDS(rf_lm_adj, paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm.rds",sep=""))
   ## Block to open prior files for updating work
-  # rf.qrf <- readRDS(paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm.rds",sep=""))
-  # rf_lm_adj <- readRDS(paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm.rds",sep=""))
+  rf.qrf <- readRDS(paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm.rds",sep=""))
+  rf_lm_adj <- readRDS(paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm.rds",sep=""))
 
 
   ############################## Raster Preditions ######################################################
   ##### Reference covar rasters to use in prediction
-  # rasters <- stack(cov.grids)
-  # #names(rasters)
-  #
-  # ## Ranger Predict
-  # predfun <- function(model, ...) predict(model, ...)$predictions
-  # # TODO figure out why internal ranger parallelization did not seem to work.
-  # # predtst <- predict(rasters, rf.qrf, fun=predfun, type="response", progress="text", num.threads = 50)
-  #
-  #
-  # ## Predict onto covariate grid
-  # ## Parallelized predict
-  # rasterOptions(maxmemory = 7e+09,chunksize = 1e+09)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
-  # beginCluster(50,type='SOCK')
-  # Sys.time()
-  # predl <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.025)),progress="text")
-  # Sys.time()
-  # predh <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.975)),progress="text")
-  # Sys.time()
-  # #pred <- predict(rasters, rf.qrf, fun=predfun, progress="text")
-  # pred <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun), progress="text") # works ok
-  # #pred <- clusterR(rasters, predict, args=list(model=soiclass),progress="text")
-  # Sys.time()
-  # ## End cluster to clear cache and memory
-  # # endCluster()
-  # # gc()
-  # # beginCluster(50,type='SOCK')
-  # ## Rename for lm adjustment
-  # names(pred) <- "trainpreds"
-  # # ## Linear Adjustment
-  # predlm <- clusterR(pred, predict, args=list(model=rf_lm_adj),progress="text")
-  # ## Scale function for saving rasters as integers
-  # rastscale.fn <- function(x) {
-  #   ind <- x*datastretch
-  #   ind <- ifelse(ind<0,0,ind)
-  #   return(ind)
-  # }
-  # ## Logic statement to handle transformed versus non transformed
-  # if(trans=="none"){ # For models that have not been transformed
-  #   # ## PI widths
-  #   s <- stack(predh,predl)
-  #   # PIwidth.fn <- function(a,b) {
-  #   #   ind <- a-b
-  #   #   return(ind)
-  #   # }
-  #   # PIwidth <- clusterR(s, overlay, args=list(fun=PIwidth.fn),progress = "text")
-  #   # # Determine 95% interquantile range of original training data for horizons that include the depth being predicted
-  #   PIrelwidth.fn <- function(a,b) {
-  #     ind <- ((a-b)/varrange)*1000
-  #     return(ind)
-  #   }
-  #   PIrelwidth <- clusterR(s, overlay, args=list(fun=PIrelwidth.fn),progress = "text",export='varrange')
-  #   ## Rescale rasters for saving
-  #   predsc <- clusterR(pred, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-  #   predlmsc <- clusterR(predlm, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-  #   predlsc <- clusterR(predl, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-  #   predhsc <- clusterR(predh, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-  #   ## Write rasters
-  #   writeRaster(predsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-  #   writeRaster(predlmsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRFadj.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-  #   writeRaster(predlsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_l.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-  #   writeRaster(predhsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_h.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-  #   writeRaster(PIrelwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_1000x_",d,"_cm_2D_QRF_95PI_relwidth.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
-  #   # # writeRaster(PIwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",d,"_cm_2D_QRF_95PI_width.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
-  # } else {
-  #   ## Back transformation Stuff
-  #   if(trans=="log10"){
-  #     smrest <- mean(10^(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
-  #     bt.fnlm <- function(x) { # Duans smearing est
-  #     ind <-  ((10^(x))-0.1)*smrest
-  #     return(ind)
-  #     }
-  #     bt.fn <- function(x) {
-  #       ind <-  (10^(x))-0.1
-  #       return(ind)
-  #     }
-  #   }
-  #   if(trans=="log"){
-  #     smrest <- mean(exp(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
-  #     bt.fnlm <- function(x) { # Duans smearing est
-  #     ind <-  ((exp(x))-1)*smrest
-  #     return(ind)
-  #     }
-  #     bt.fn <- function(x) {
-  #       ind <-  (exp(x))-1
-  #       return(ind)
-  #     }
-  #     }
-  #   if(trans=="sqrt"){
-  #     smrest <- mean((pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj)^2)
-  #     bt.fnlm <- function(x) { # Duans smearing est
-  #     ind <-  (x^2)*smrest
-  #     return(ind)
-  #     }
-  #     bt.fn <- function(x) {
-  #       ind <-  x^2
-  #       return(ind)
-  #     }
-  #     }
-  #   predh_bt <- clusterR(predh, calc, args=list(fun=bt.fn),progress='text')
-  #   predl_bt <- clusterR(predl, calc, args=list(fun=bt.fn),progress='text')
-  #   pred_bt <- clusterR(pred, calc, args=list(fun=bt.fn),progress='text')
-  #   predlm_bt <- clusterR(predlm, calc, args=list(fun=bt.fnlm),progress='text',export='smrest')
-  #   ## Stack PIs for RPI calculation
-  #   s_bt <- stack(predh_bt,predl_bt)
-  #   # PIwidth_bt.fn <- function(a,b) {
-  #   #   ind <- a-b
-  #   #   return(ind)
-  #   # }
-  #   # PIwidth_bt <- clusterR(s_bt, overlay, args=list(fun=PIwidth_bt.fn),progress = "text")
-  #   ## If transformed, use the following code for PI width prep steps
-  #   PIrelwidth_bt.fn <- function(a,b) {
-  #     ind <- ((a-b)/varrange)*100
-  #     ind <- ifelse(ind>65533,65533,ind)
-  #     return(ind)
-  #   }
-  #   PIrelwidth <- clusterR(s_bt, overlay, args=list(fun=PIrelwidth_bt.fn),progress = "text", export='varrange')
-  #   ## Rescale rasters for saving
-  #   pred_btsc <- clusterR(pred_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-  #   predlm_btsc <- clusterR(predlm_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-  #   predl_btsc <- clusterR(predl_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-  #   predh_btsc <- clusterR(predh_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
-  #   ## Write rasters
-  #   writeRaster(pred_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-  #   writeRaster(predlm_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRFadj_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-  #   writeRaster(predl_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_l_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-  #   writeRaster(predh_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_h_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-  #   #writeRaster(PIwidth_bt, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_width_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
-  #   writeRaster(PIrelwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_100x_",d,"_cm_2D_QRF_95PI_relwidth_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
-  # }
-  # ## Close out raster cluster
+  rasters <- stack(cov.grids)
+  #names(rasters)
+
+  ## Ranger Predict
+  predfun <- function(model, ...) predict(model, ...)$predictions
+  # TODO figure out why internal ranger parallelization did not seem to work.
+  # predtst <- predict(rasters, rf.qrf, fun=predfun, type="response", progress="text", num.threads = 50)
+
+
+  ## Predict onto covariate grid
+  ## Parallelized predict
+  rasterOptions(maxmemory = 7e+09,chunksize = 1e+09)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
+  beginCluster(50,type='SOCK')
+  Sys.time()
+  predl <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.025)),progress="text")
+  Sys.time()
+  predh <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.975)),progress="text")
+  Sys.time()
+  #pred <- predict(rasters, rf.qrf, fun=predfun, progress="text")
+  pred <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun), progress="text") # works ok
+  #pred <- clusterR(rasters, predict, args=list(model=soiclass),progress="text")
+  Sys.time()
+  ## End cluster to clear cache and memory
   # endCluster()
+  # gc()
+  # beginCluster(50,type='SOCK')
+  ## Rename for lm adjustment
+  names(pred) <- "trainpreds"
+  # ## Linear Adjustment
+  predlm <- clusterR(pred, predict, args=list(model=rf_lm_adj),progress="text")
+  ## Scale function for saving rasters as integers
+  rastscale.fn <- function(x) {
+    ind <- x*datastretch
+    ind <- ifelse(ind<0,0,ind)
+    return(ind)
+  }
+  ## Logic statement to handle transformed versus non transformed
+  if(trans=="none"){ # For models that have not been transformed
+    # ## PI widths
+    s <- stack(predh,predl)
+    # PIwidth.fn <- function(a,b) {
+    #   ind <- a-b
+    #   return(ind)
+    # }
+    # PIwidth <- clusterR(s, overlay, args=list(fun=PIwidth.fn),progress = "text")
+    # # Determine 95% interquantile range of original training data for horizons that include the depth being predicted
+    PIrelwidth.fn <- function(a,b) {
+      ind <- ((a-b)/varrange)*1000
+      return(ind)
+    }
+    PIrelwidth <- clusterR(s, overlay, args=list(fun=PIrelwidth.fn),progress = "text",export='varrange')
+    ## Rescale rasters for saving
+    predsc <- clusterR(pred, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+    predlmsc <- clusterR(predlm, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+    predlsc <- clusterR(predl, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+    predhsc <- clusterR(predh, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+    ## Write rasters
+    writeRaster(predsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+    writeRaster(predlmsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRFadj.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+    writeRaster(predlsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_l.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+    writeRaster(predhsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_h.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+    writeRaster(PIrelwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_1000x_",d,"_cm_2D_QRF_95PI_relwidth.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
+    # # writeRaster(PIwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",d,"_cm_2D_QRF_95PI_width.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
+  } else {
+    ## Back transformation Stuff
+    if(trans=="log10"){
+      smrest <- mean(10^(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
+      bt.fnlm <- function(x) { # Duans smearing est
+      ind <-  ((10^(x))-0.1)*smrest
+      return(ind)
+      }
+      bt.fn <- function(x) {
+        ind <-  (10^(x))-0.1
+        return(ind)
+      }
+    }
+    if(trans=="log"){
+      smrest <- mean(exp(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
+      bt.fnlm <- function(x) { # Duans smearing est
+      ind <-  ((exp(x))-1)*smrest
+      return(ind)
+      }
+      bt.fn <- function(x) {
+        ind <-  (exp(x))-1
+        return(ind)
+      }
+      }
+    if(trans=="sqrt"){
+      smrest <- mean((pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj)^2)
+      bt.fnlm <- function(x) { # Duans smearing est
+      ind <-  (x^2)*smrest
+      return(ind)
+      }
+      bt.fn <- function(x) {
+        ind <-  x^2
+        return(ind)
+      }
+      }
+    predh_bt <- clusterR(predh, calc, args=list(fun=bt.fn),progress='text')
+    predl_bt <- clusterR(predl, calc, args=list(fun=bt.fn),progress='text')
+    pred_bt <- clusterR(pred, calc, args=list(fun=bt.fn),progress='text')
+    predlm_bt <- clusterR(predlm, calc, args=list(fun=bt.fnlm),progress='text',export='smrest')
+    ## Stack PIs for RPI calculation
+    s_bt <- stack(predh_bt,predl_bt)
+    # PIwidth_bt.fn <- function(a,b) {
+    #   ind <- a-b
+    #   return(ind)
+    # }
+    # PIwidth_bt <- clusterR(s_bt, overlay, args=list(fun=PIwidth_bt.fn),progress = "text")
+    ## If transformed, use the following code for PI width prep steps
+    PIrelwidth_bt.fn <- function(a,b) {
+      ind <- ((a-b)/varrange)*100
+      ind <- ifelse(ind>65533,65533,ind)
+      return(ind)
+    }
+    PIrelwidth <- clusterR(s_bt, overlay, args=list(fun=PIrelwidth_bt.fn),progress = "text", export='varrange')
+    ## Rescale rasters for saving
+    pred_btsc <- clusterR(pred_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+    predlm_btsc <- clusterR(predlm_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+    predl_btsc <- clusterR(predl_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+    predh_btsc <- clusterR(predh_bt, calc, args=list(fun=rastscale.fn),progress='text',export='datastretch')
+    ## Write rasters
+    writeRaster(pred_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+    writeRaster(predlm_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRFadj_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+    writeRaster(predl_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_l_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+    writeRaster(predh_btsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_h_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
+    #writeRaster(PIwidth_bt, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_width_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
+    writeRaster(PIrelwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_100x_",d,"_cm_2D_QRF_95PI_relwidth_bt.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
+  }
+  ## Close out raster cluster
+  endCluster()
 
 
   ## Wrap up loop

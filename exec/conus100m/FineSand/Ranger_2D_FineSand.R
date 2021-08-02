@@ -93,6 +93,11 @@ pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp.rds",sep=""))
 ## Updated extract for CONUS
 pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_extracted.rds",sep=""))
 pts.ext <- left_join(pts.ext, pts_geocode, by = "peiid")
+s$peiid <- as.character(s$peiid)
+pts.ext <- left_join(pts.ext, s[,c("peiid","obsdate","obsdatekind")], by = "peiid")
+pts.ext$obsdate <- as.Date(pts.ext$obsdate)
+pts.ext$geo_wt <- ifelse(pts.ext$geo_wt==8 & pts.ext$obsdate > "2000-01-01" & pts.ext$obsdatekind == "actual site observation date",
+                         7,pts.ext$geo_wt)
 pts.ext$geo_wt <- ifelse(is.na(pts.ext$geo_wt),8,pts.ext$geo_wt) # 18.8k NAs put in class 8
 
 ## Weed out duplicates
@@ -157,8 +162,9 @@ scd.pts.ext$decdate <- lubridate::decimal_date(scd.pts.ext$date)
 scd.pts.ext$peiid <- as.character(scd.pts.ext$peiid)
 scd.pts.ext <- left_join(scd.pts.ext, pts_geocode, by="peiid")
 scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt) & scd.pts.ext$date >= "2010-01-01", 6, scd.pts.ext$geo_wt)
-scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt) & scd.pts.ext$date >= "2005-01-01", 7, scd.pts.ext$geo_wt)
+scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt) & scd.pts.ext$date >= "2000-01-01", 7, scd.pts.ext$geo_wt)
 scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt), 8, scd.pts.ext$geo_wt) ## Awful lot of class 8s...
+scd.pts.ext$geo_wt <- ifelse(scd.pts.ext$geo_wt == 8 & scd.pts.ext$date >= "2000-01-01", 7, scd.pts.ext$geo_wt) #updated 7/8/21
 
 ## Now join scd.hor to scd.pts and get rid of any duplicates
 scd.pts.ext.hor <- inner_join(scd.hor,scd.pts.ext, by="site_key")
@@ -192,7 +198,7 @@ img10kfid <- img10kf
 values(img10kfid) <- 1:ncell(img10kfid)
 img10kfid <- overlay(stack(img10kfid,img10kf),fun=function(a,b){a*b})
 ## Bring in feature space weights reference distributions
-ft_wts_ref <- readRDS("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/ref_df.RDS") # From Stephen Roecker, 5/3/2021
+ft_wts_ref <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/ref_df.RDS") # From Stephen Roecker, 5/3/2021
 
 ##### Loop to train and predict properties for all depths
 depths <- c(0,5,15,30,60,100,150)
@@ -303,14 +309,18 @@ for(d in depths){
   geo_vec <- c("gps","gps_gps2","gps_gps2_gps3", "gps_gps2_gps3_unk")
   srce_vec <- c("scd","scd_direct","scd_direct_home","scd_direct_home_adjacent")
   grid_vec <- expand.grid(geo=geo_vec, srce=srce_vec, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
+  #TODO: pull out train sets with only scd gps and gps2
+  grid_vec <- grid_vec[!(grid_vec$srce=="scd"&grid_vec$geo=="gps"),]
+  grid_vec <- grid_vec[!(grid_vec$srce=="scd"&grid_vec$geo=="gps_gps2"),]
   CV_grid_fn <- function(x){
     levs <- data.frame(grid_vec[x,])
     colnames(levs) <- colnames(grid_vec)
     geo_levs <- str_split(levs$geo, "_")[[1]]
     srce_levs <- str_split(levs$srce, "_")[[1]]
     ptseval <- pts.extcc
-    ptseval <- ptseval[ptseval@data$geo_cls %in% geo_levs,]
     ptseval <- ptseval[ptseval@data$mtchtype %in% srce_levs,]
+    # subset by geolevels, but leave in all scd since 2000 as the baseline training/evaluation data
+    ptseval <- ptseval[(ptseval@data$mtchtype=="scd"&ptseval@data$geo_wt<8)|(ptseval@data$geo_cls %in% geo_levs),]
     nfolds <- 10
     resol <- resol_rpi # kilometers
     ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
@@ -326,7 +336,7 @@ for(d in depths){
   ## Subset CVs to recent scd points
   CV_grid_lst_scd_gps <- lapply(1:length(CV_grid_lst),function(x){
     df <- CV_grid_lst[[x]]
-    df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"),]
+    df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"|df$geo_cls=="gps3"),]
     return(df)
   })
   CV_grid_lst_scd_all <- lapply(1:length(CV_grid_lst),function(x){
@@ -340,7 +350,7 @@ for(d in depths){
   Grid_valmets_scd_all <- DSMprops::valmetrics(xlst = CV_grid_lst_scd_all, trans = trans, prop = prop, depth = d)
   valmets_rank <- data.frame( cvgrid = Grid_valmets$cvgrid, Rsq.all = Grid_valmets$Rsq, RPI.all = Grid_valmets$RPI.cvave,
                               Rsq.scd = Grid_valmets_scd_all$Rsq, Rsq.gscd = Grid_valmets_scd_gps$Rsq, QRMSE.gscd = Grid_valmets$QRMSE,
-                             QMedAE.gscd = Grid_valmets_scd_gps$QMedAE, n = Grid_valmets$n)
+                              QMedAE.gscd = Grid_valmets_scd_gps$QMedAE, n = Grid_valmets$n)
   grid_valmets_lst <- list(Grid_valmets,Grid_valmets_scd_gps,Grid_valmets_scd_all,valmets_rank)
   names(grid_valmets_lst) <- c("Grid_valmets","Grid_valmets_scd_gps","Grid_valmets_scd_all","valmets_rank")
   saveRDS(grid_valmets_lst,paste(predfolder,"/CV_grid_valmets_", prop, '_',d, "_cm.rds",sep=""))
@@ -361,7 +371,7 @@ for(d in depths){
   geo_params <- model_params[(match("geo",model_params)+1):(match("srce",model_params)-1)]
   ## Subset training points to new optimized dataset
   pts.pcv <- pts.extcc[pts.extcc$mtchtype %in% srce_params,]
-  pts.pcv <- pts.pcv[pts.pcv$geo_cls %in% geo_params,]
+  pts.pcv <- pts.pcv[(pts.pcv$mtchtype=="scd"&pts.pcv$geo_wt<8)|(pts.pcv$geo_cls %in% geo_params),] # subset, but leave scd > 2000
 
   ## Characterize pt density for case weights
   polywin    <- as(polybound, "owin")
@@ -379,103 +389,103 @@ for(d in depths){
   writeRaster(Qd.rast, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",d,"_ptdensity_per_cell.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
   names(Qd.rast) <- "ptspercell"
   pts.pcv <- extract(Qd.rast, pts.pcv, df=T, sp=T)
-  ## Create spatial density based weights: better way to do this??
-  pts.pcv@data$sp_wts <- (1-(pts.pcv@data$ptspercell / (max(pts.pcv@data$ptspercell)*1.1)))^5
-  ## Feature space weights
-  vars <- c("SLPNED6", "POSNED6", "EVI", "PPT", "TEMP")
-  p1 <- seq(0, 1, 0.1)
-  p2 <- seq(0, 1, 0.5)
-  probs <- list(p1, p2, p1, p1, p1, NULL)
-  names(probs) <- vars
-  pts.pcv@data$feat_wts <- DSMprops::feat_wts(ref_df = ft_wts_ref, obs_df = pts.pcv@data, vars, probs)$wts # ~700 NAs for d = 0
-  pts.pcv@data$feat_wts <- ifelse(is.na(pts.pcv@data$feat_wts), median(pts.pcv@data$feat_wts, na.rm=T), pts.pcv@data$feat_wts) # Stopgap for NAs created
-  pts.pcv@data$feat_wts <- pts.pcv@data$feat_wts / max(pts.pcv@data$feat_wts, na.rm = T) # Scale 0-1
-  ## Combined sample weights: better way to do?
-  pts.pcv@data$tot_wts <- pts.pcv@data$sp_wts * pts.pcv@data$feat_wts
-
-  ######## Test for case weights schemes
-  ## Now prepare a case.weights grid search using the chosen cross validation approach
-  feat_vec <- c("full","mid","none")
-  sp_vec <- c("full","mid","none")
-  grid_vec <- expand.grid(feat=feat_vec, spat=sp_vec, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
-  CV_wts_grid_fn <- function(x){
-    levs <- data.frame(grid_vec[x,])
-    colnames(levs) <- colnames(grid_vec)
-    ptseval <- pts.pcv
-    if(levs$feat == "mid"){ptseval@data$feat_wts <- ptseval@data$feat_wts^(1/7)}
-    if(levs$feat == "none"){ptseval@data$feat_wts <- 1}
-    if(levs$spat == "mid"){ptseval@data$sp_wts <- sqrt(ptseval@data$sp_wts)}
-    if(levs$spat == "none"){ptseval@data$sp_wts <- 1}
-    nfolds <- 10
-    resol <- resol_rpi # kilometers
-    ptseval@data$tot_wts <- ptseval@data$feat_wts * ptseval@data$sp_wts
-    # ptsevalsamp <- sample(ptseval@data$peiid, size = floor(0.75 * nrow(ptseval@data)), prob = ptseval@data$tot_wts)
-    # ptseval <- ptseval[ptseval@data$peiid %in% ptsevalsamp,]
-    # ptseval@data$tot_wts <- NULL
-    # ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
-    #                                     rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux")
-    ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
-                                        rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux", casewts = "tot_wts")
-    ptsevalcv$cvgrid <- paste(colnames(levs),levs[1,],collapse="_",sep="_")
-    return(ptsevalcv)
-  }
-  ## List apply implementation
-  Sys.time()
-  CV_wts_grid_lst <- lapply(1:nrow(grid_vec),CV_wts_grid_fn)
-  Sys.time()
-  #saveRDS(CV_wts_grid_lst,paste(predfolder,"/CV_wts_grid_lst_", prop, '_',d, "_cm.rds",sep="")) # takes forever
-  ## Validation metrics for CVs with different case weighting schemes
-  ## Subset CVs to recent scd points
-  CV_wts_grid_lst_scd_gps <- lapply(1:length(CV_wts_grid_lst),function(x){
-    df <- CV_wts_grid_lst[[x]]
-    df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"),]
-    return(df)
-  })
-  CV_wts_grid_lst_scd_all <- lapply(1:length(CV_wts_grid_lst),function(x){
-    df <- CV_wts_grid_lst[[x]]
-    df <- df[df$mtchtype=="scd",]
-    return(df)
-  })
-  ## Validation metrics for CVs with different case weighting schemes
-  Grid_wt_valmets <- DSMprops::valmetrics(xlst = CV_wts_grid_lst, trans = trans, prop = prop, depth = d)
-  Grid_wt_valmets_scd_gps <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_gps, trans = trans, prop = prop, depth = d)
-  Grid_wt_valmets_scd_all <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_all, trans = trans, prop = prop, depth = d)
-  wt_valmets_rank <- data.frame( cvgrid = Grid_wt_valmets$cvgrid, Rsq.all = Grid_wt_valmets$Rsq, RPI.all = Grid_wt_valmets$RPI.cvave,
-                              Rsq.scd = Grid_wt_valmets_scd_all$Rsq, Rsq.gscd = Grid_wt_valmets_scd_gps$Rsq, QRMSE.gscd = Grid_wt_valmets$QRMSE,
-                              QMedAE_bt.gscd = Grid_wt_valmets_scd_gps$QMedAE_bt, n = Grid_wt_valmets$n)
-  Grid_wt_valmets_lst <- list(Grid_wt_valmets,Grid_wt_valmets_scd_gps,Grid_wt_valmets_scd_all,wt_valmets_rank)
-  names(Grid_wt_valmets_lst) <- c("Grid_wt_valmets","Grid_wt_valmets_scd_gps","Grid_wt_valmets_scd_all","wt_valmets_rank")
-  saveRDS(Grid_wt_valmets_lst,paste(predfolder,"/CV_wts_grid_wt_valmets_", prop, '_',d, "_cm.rds",sep=""))
-  ## Now pick model mode ranking on multiple criteria
-  wt_valmets_rank$RPI.cvave.rnk <- rank(wt_valmets_rank$RPI.all,ties.method = "average")
-  wt_valmets_rank$QRMSE.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QRMSE.gscd,ties.method = "average")
-  wt_valmets_rank$QMedAE.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QMedAE.gscd,ties.method = "average")
-  wt_valmets_rank$Rsq.scd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.scd,ties.method = "average")
-  wt_valmets_rank$Rsq.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.gscd,ties.method = "average")
-  wt_valmets_rank$Rsq.all.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.all,ties.method = "average")
-  wt_valmets_rank$rank_ave <- apply(wt_valmets_rank[,c("RPI.cvave.rnk","QRMSE.gscd.rnk","QMedAE.gscd.rnk",
-                                                 "Rsq.scd.rnk","Rsq.gscd.rnk","Rsq.all.rnk")], MARGIN = 1, FUN=mean)
-  wt_valmets_rank$rank_final <- rank(wt_valmets_rank$rank_ave,ties.method = "random")
-  write.table(wt_valmets_rank, paste(predfolder,"/Grid_wt_valmets_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
-
-  ## Pick out CV matrix to save and plot with
-  idx_wts_val <- which(wt_valmets_rank$rank_final==1)
-  #bestwtval <- wt_valmets_rank[idx_val,c("cvgrid")]
-  bestvalwtpts <- CV_wts_grid_lst[[idx_wts_val]]
-  saveRDS(bestvalwtpts,paste(predfolder,"/CV_finalwts_best_pts_", prop, '_',d, "_cm.rds",sep=""))
-
-  ## Now set up final case weights based on grid search
-  model_params <- str_split(wt_valmets_rank[wt_valmets_rank$rank_final==min(wt_valmets_rank$rank_final),c("cvgrid")][1],"_")[[1]]
-  spat_param <- model_params[(match("spat",model_params)+1):length(model_params)]
-  feat_param <- model_params[(match("feat",model_params)+1):(match("spat",model_params)-1)]
-  ## Adjust weights according to chosen model
-  pts.pcv@data <- dplyr::mutate(pts.pcv@data, sp_wts = ifelse(spat_param == "mid",sqrt(sp_wts),sp_wts),
-                                sp_wts = ifelse(spat_param == "none",1,sp_wts)) # spatial wts
-  pts.pcv@data <- dplyr::mutate(pts.pcv@data, feat_wts = ifelse(feat_param == "mid",feat_wts^(1/7),feat_wts),
-                                feat_wts = ifelse(feat_param == "none",1,feat_wts)) # feat wts
+  # ## Create spatial density based weights: better way to do this??
+  # pts.pcv@data$sp_wts <- (1-(pts.pcv@data$ptspercell / (max(pts.pcv@data$ptspercell)*1.1)))^5
+  # ## Feature space weights
+  # vars <- c("SLPNED6", "POSNED6", "EVI", "PPT", "TEMP")
+  # p1 <- seq(0, 1, 0.1)
+  # p2 <- seq(0, 1, 0.5)
+  # probs <- list(p1, p2, p1, p1, p1, NULL)
+  # names(probs) <- vars
+  # pts.pcv@data$feat_wts <- DSMprops::feat_wts(ref_df = ft_wts_ref, obs_df = pts.pcv@data, vars, probs)$wts # ~700 NAs for d = 0
+  # pts.pcv@data$feat_wts <- ifelse(is.na(pts.pcv@data$feat_wts), median(pts.pcv@data$feat_wts, na.rm=T), pts.pcv@data$feat_wts) # Stopgap for NAs created
+  # pts.pcv@data$feat_wts <- pts.pcv@data$feat_wts / max(pts.pcv@data$feat_wts, na.rm = T) # Scale 0-1
+  # ## Combined sample weights: better way to do?
+  # pts.pcv@data$tot_wts <- pts.pcv@data$sp_wts * pts.pcv@data$feat_wts
+  #
+  # ######## Test for case weights schemes
+  # ## Now prepare a case.weights grid search using the chosen cross validation approach
+  # feat_vec <- c("full","mid","none")
+  # sp_vec <- c("full","mid","none")
+  # grid_vec <- expand.grid(feat=feat_vec, spat=sp_vec, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
+  # CV_wts_grid_fn <- function(x){
+  #   levs <- data.frame(grid_vec[x,])
+  #   colnames(levs) <- colnames(grid_vec)
+  #   ptseval <- pts.pcv
+  #   if(levs$feat == "mid"){ptseval@data$feat_wts <- ptseval@data$feat_wts^(1/7)}
+  #   if(levs$feat == "none"){ptseval@data$feat_wts <- 1}
+  #   if(levs$spat == "mid"){ptseval@data$sp_wts <- sqrt(ptseval@data$sp_wts)}
+  #   if(levs$spat == "none"){ptseval@data$sp_wts <- 1}
+  #   nfolds <- 10
+  #   resol <- resol_rpi # kilometers
+  #   ptseval@data$tot_wts <- ptseval@data$feat_wts * ptseval@data$sp_wts
+  #   # ptsevalsamp <- sample(ptseval@data$peiid, size = floor(0.75 * nrow(ptseval@data)), prob = ptseval@data$tot_wts)
+  #   # ptseval <- ptseval[ptseval@data$peiid %in% ptsevalsamp,]
+  #   # ptseval@data$tot_wts <- NULL
+  #   # ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
+  #   #                                     rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux")
+  #   ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
+  #                                       rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux", casewts = "tot_wts")
+  #   ptsevalcv$cvgrid <- paste(colnames(levs),levs[1,],collapse="_",sep="_")
+  #   return(ptsevalcv)
+  # }
+  # ## List apply implementation
+  # Sys.time()
+  # CV_wts_grid_lst <- lapply(1:nrow(grid_vec),CV_wts_grid_fn)
+  # Sys.time()
+  # #saveRDS(CV_wts_grid_lst,paste(predfolder,"/CV_wts_grid_lst_", prop, '_',d, "_cm.rds",sep="")) # takes forever
+  # ## Validation metrics for CVs with different case weighting schemes
+  # ## Subset CVs to recent scd points
+  # CV_wts_grid_lst_scd_gps <- lapply(1:length(CV_wts_grid_lst),function(x){
+  #   df <- CV_wts_grid_lst[[x]]
+  #   df <- df[df$mtchtype=="scd"&(df$geo_cls=="gps"|df$geo_cls=="gps2"|df$geo_cls=="gps3"),]
+  #   return(df)
+  # })
+  # CV_wts_grid_lst_scd_all <- lapply(1:length(CV_wts_grid_lst),function(x){
+  #   df <- CV_wts_grid_lst[[x]]
+  #   df <- df[df$mtchtype=="scd",]
+  #   return(df)
+  # })
+  # ## Validation metrics for CVs with different case weighting schemes
+  # Grid_wt_valmets <- DSMprops::valmetrics(xlst = CV_wts_grid_lst, trans = trans, prop = prop, depth = d)
+  # Grid_wt_valmets_scd_gps <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_gps, trans = trans, prop = prop, depth = d)
+  # Grid_wt_valmets_scd_all <- DSMprops::valmetrics(xlst = CV_wts_grid_lst_scd_all, trans = trans, prop = prop, depth = d)
+  # wt_valmets_rank <- data.frame( cvgrid = Grid_wt_valmets$cvgrid, Rsq.all = Grid_wt_valmets$Rsq, RPI.all = Grid_wt_valmets$RPI.cvave,
+  #                             Rsq.scd = Grid_wt_valmets_scd_all$Rsq, Rsq.gscd = Grid_wt_valmets_scd_gps$Rsq, QRMSE.gscd = Grid_wt_valmets$QRMSE,
+  #                             QMedAE.gscd = Grid_wt_valmets_scd_gps$QMedAE, n = Grid_wt_valmets$n)
+  # Grid_wt_valmets_lst <- list(Grid_wt_valmets,Grid_wt_valmets_scd_gps,Grid_wt_valmets_scd_all,wt_valmets_rank)
+  # names(Grid_wt_valmets_lst) <- c("Grid_wt_valmets","Grid_wt_valmets_scd_gps","Grid_wt_valmets_scd_all","wt_valmets_rank")
+  # saveRDS(Grid_wt_valmets_lst,paste(predfolder,"/CV_wts_grid_wt_valmets_", prop, '_',d, "_cm.rds",sep=""))
+  # ## Now pick model mode ranking on multiple criteria
+  # wt_valmets_rank$RPI.cvave.rnk <- rank(wt_valmets_rank$RPI.all,ties.method = "average")
+  # wt_valmets_rank$QRMSE.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QRMSE.gscd,ties.method = "average")
+  # wt_valmets_rank$QMedAE.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$QMedAE.gscd,ties.method = "average")
+  # wt_valmets_rank$Rsq.scd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.scd,ties.method = "average")
+  # wt_valmets_rank$Rsq.gscd.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.gscd,ties.method = "average")
+  # wt_valmets_rank$Rsq.all.rnk <- (nrow(wt_valmets_rank)+1) - rank(wt_valmets_rank$Rsq.all,ties.method = "average")
+  # wt_valmets_rank$rank_ave <- apply(wt_valmets_rank[,c("RPI.cvave.rnk","QRMSE.gscd.rnk","QMedAE.gscd.rnk",
+  #                                                "Rsq.scd.rnk","Rsq.gscd.rnk","Rsq.all.rnk")], MARGIN = 1, FUN=mean)
+  # wt_valmets_rank$rank_final <- rank(wt_valmets_rank$rank_ave,ties.method = "random")
+  # write.table(wt_valmets_rank, paste(predfolder,"/Grid_wt_valmets_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
+  #
+  # ## Pick out CV matrix to save and plot with
+  # idx_wts_val <- which(wt_valmets_rank$rank_final==1)
+  # #bestwtval <- wt_valmets_rank[idx_val,c("cvgrid")]
+  # bestvalwtpts <- CV_wts_grid_lst[[idx_wts_val]]
+  # saveRDS(bestvalwtpts,paste(predfolder,"/CV_finalwts_best_pts_", prop, '_',d, "_cm.rds",sep=""))
+  #
+  # ## Now set up final case weights based on grid search
+  # model_params <- str_split(wt_valmets_rank[wt_valmets_rank$rank_final==min(wt_valmets_rank$rank_final),c("cvgrid")][1],"_")[[1]]
+  # spat_param <- model_params[(match("spat",model_params)+1):length(model_params)]
+  # feat_param <- model_params[(match("feat",model_params)+1):(match("spat",model_params)-1)]
+  # ## Adjust weights according to chosen model
+  # pts.pcv@data <- dplyr::mutate(pts.pcv@data, sp_wts = ifelse(spat_param == "mid",sqrt(sp_wts),sp_wts),
+  #                               sp_wts = ifelse(spat_param == "none",1,sp_wts)) # spatial wts
+  # pts.pcv@data <- dplyr::mutate(pts.pcv@data, feat_wts = ifelse(feat_param == "mid",feat_wts^(1/7),feat_wts),
+  #                               feat_wts = ifelse(feat_param == "none",1,feat_wts)) # feat wts
   ## Save training points file
   saveRDS(pts.pcv, paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
-  #pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
+  pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
 
   ###### Cross validation plots
   ## All data
