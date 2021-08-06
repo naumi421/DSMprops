@@ -27,7 +27,7 @@ ptsfolder <- "/push/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
 
 ######## Load soil profile collection ##############
 ## Geographic coordinate quality levels
-pts_geocode <- readRDS("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/geocode_weighting.RDS") # From Dave White
+pts_geocode <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/geocode_weighting.RDS") # From Dave White
 # pts_geocode_wt <- readRDS("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
 pts_geocode$geo_wt <- pts_geocode$wt
 pts_geocode$wt <- NULL
@@ -40,7 +40,7 @@ pts <- readRDS(paste(ptsfolder,"/NASIS_all_component_horizon_match_SPC_ssurgo20.
 pts.proj <- proj4string(pts)
 n.pts <- pts@site
 ## Bring in orig nasis points to eliminate those with partial coords
-load("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/nasis_sites_20210325.RData")
+load("/push/Hyb100m_gdrv/2020_Pedons/nasis_sites_20210325.RData")
 s$latnchar <- nchar(abs(s$y_std))
 s$longnchar <- nchar(abs(s$x_std))
 s <- subset(s, s$latnchar > 5 & s$longnchar > 6)
@@ -91,7 +91,7 @@ pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp.rds",sep=""))
 # ## Save points
 # saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_extracted.rds",sep=""))
 ## Updated extract for CONUS
-pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_extracted.rds",sep=""))
+pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_extracted_spatcovs.rds",sep=""))
 pts.ext <- left_join(pts.ext, pts_geocode, by = "peiid")
 s$peiid <- as.character(s$peiid)
 pts.ext <- left_join(pts.ext, s[,c("peiid","obsdate","obsdatekind")], by = "peiid")
@@ -121,7 +121,7 @@ datastretchlab <- paste(datastretch,"x",sep="")
 
 ##### Load and prep SCD data
 ## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
-con <- dbConnect(RSQLite::SQLite(), "/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
+con <- dbConnect(RSQLite::SQLite(), "/push/Hyb100m_gdrv/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
 (ldm_names <- dbListTables(con))
 ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
 names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy")
@@ -133,7 +133,7 @@ ldm$NCSS_Pedon_Taxonomy$peiid <- ldm$NCSS_Pedon_Taxonomy$pedoniid
 scd.pts <- ldm$NCSS_Site_Location
 scd.pts <- left_join(scd.pts,ldm$NCSS_Pedon_Taxonomy[ldm$NCSS_Pedon_Taxonomy$site_key %in% scd.pts$site_key, c("site_key","peiid")], by="site_key")
 
-# ### SCD prep: Weed out points with imprecise coordinates ###
+### SCD prep: Weed out points with imprecise coordinates ###
 scd.pts$latnchar <- nchar(abs(scd.pts$latitude_decimal))
 scd.pts$longnchar <- nchar(abs(scd.pts$longitude_decima))
 scd.pts <- subset(scd.pts, scd.pts$latnchar > 5 & scd.pts$longnchar > 6)
@@ -155,7 +155,7 @@ scd.pts <- scd.pts[polybound,]
 # scd.pts.ext <- DSMprops::parPTextr(scd.pts, cov.grids, os = "linux", nthreads=50)
 # ## Save scd pts with extraction
 # saveRDS(scd.pts.ext, paste(predfolder,"/SCD","_extracted.rds",sep=""))
-scd.pts.ext <- readRDS(paste(predfolder,"/SCD","_extracted.rds",sep=""))
+scd.pts.ext <- readRDS(paste(predfolder,"/SCD","_extracted_spatcovs.rds",sep=""))
 ## Create geo-coordinate quality weights
 scd.pts.ext$date <- as.Date(scd.pts.ext$site_obsdate, format = "%m/%d/%Y")
 scd.pts.ext$decdate <- lubridate::decimal_date(scd.pts.ext$date)
@@ -485,10 +485,11 @@ for(d in depths){
   #                               feat_wts = ifelse(feat_param == "none",1,feat_wts)) # feat wts
   ## Save training points file
   saveRDS(pts.pcv, paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
-  pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
+  # pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
 
   ###### Cross validation plots
   ## All data
+  bestvalwtpts <- bestvalpts # temp fix when excluding weights 7/12/2021
   viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
   scaleFUN <- function(x) round(x,0)
   gplt.dcm.2D.CV <- ggplot(data=bestvalwtpts, aes(prop_t, pcvpred)) +
