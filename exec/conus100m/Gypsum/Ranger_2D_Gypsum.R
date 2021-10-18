@@ -10,7 +10,7 @@
 # Workspace setup
 # Install packages if not already installed
 required.packages <- c("raster", "sp", "rgdal", "ranger", "snow", "snowfall", "dplyr", "ggplot2",
-                       "hexbin","doParallel","aqp","Hmisc","spatstat","maptools","DSMprops","RSQLite","lubridate","stringr","plyr")
+                       "hexbin","doParallel","aqp","Hmisc","spatstat","maptools","DSMprops","RSQLite","lubridate","stringr")
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
@@ -20,29 +20,27 @@ rm(required.packages, new.packages)
 rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 
 ## Key Folder Locations
-predfolder <- "/push/HYBconus100m/Rock_tot"
-repofolder <- "/push/repos/DSMprops/exec/conus100m/Rock_tot"
+predfolder <- "/push/HYBconus100m/Gypsum"
+repofolder <- "/push/repos/DSMprops/exec/conus100m/Gypsum"
 covfolder <- "/push/SG100_covars"
 ptsfolder <- "/push/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
-ssurgo_fgdb <- "/home/tnaum/data/gSSURGO20/gSSURGO_CONUS.gdb"
 
 ######## Load soil profile collection ##############
 ## Geographic coordinate quality levels
 pts_geocode <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/geocode_weighting.RDS") # From Dave White
-# pts_geocode_wt <- readRDS("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
+# pts_geocode_wt <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
 pts_geocode$geo_wt <- pts_geocode$wt
 pts_geocode$wt <- NULL
 pts_geocode$peiid <- as.character(pts_geocode$peiid)
 # ## Pedon quality clases and weights
-# pts_qual_cls <- readRDS("/home/tnaum/OneDrive/USGS/NCSS/DSM_Focus_team/Natl_map/2020_Pedons/pedonquality_weighting.RDS") # Dave White
+# pts_qual_cls <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/pedonquality_weighting.RDS") # Dave White
 # pts_qual_cls <- pts_qual_cls[!duplicated(pts_qual_cls$peiid),]
 ## Pedons with extracted SSUGO component data
 pts <- readRDS(paste(ptsfolder,"/NASIS_all_component_horizon_match_SPC_ssurgo20.rds",sep=""))
 pts.proj <- proj4string(pts)
 n.pts <- pts@site
 ## Bring in orig nasis points to eliminate those with partial coords
-load("/push/Hyb100m_gdrv/2020_Pedons/nasis_pedons_20210325.RData") # object = spc, nasis soil profile collection
-load("/push/Hyb100m_gdrv/2020_Pedons/nasis_sites_20210325.RData") # object = s for nasis sites
+load("/push/Hyb100m_gdrv/2020_Pedons/nasis_sites_20210325.RData") # object s
 s$latnchar <- nchar(abs(s$y_std))
 s$longnchar <- nchar(abs(s$x_std))
 s <- subset(s, s$latnchar > 5 & s$longnchar > 6)
@@ -82,16 +80,16 @@ n.pts <- n.pts[polybound,]
 # pts.gRPI <- DSMprops::parPTextr(sp = pts.gRPI, gridlist = cov.grids, os = "linux",nthreads = 50)
 # pts.gRPI <- na.omit(pts.gRPI)
 # ## Save points
-# saveRDS(pts.gRPI, paste(ptsfolder,"/CONUS_random_gRPIsamp.rds",sep=""))
+# saveRDS(pts.gRPI, paste(ptsfolder,"/CONUS_random_gRPIsamp_spatcovs.rds",sep=""))
 ## Updated extract for CONUS
-pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp.rds",sep=""))
+pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp_spatcovs.rds",sep=""))
 
 
 ## Parallelized extract for nasis points: (larger datasets)
 # rasterOptions(maxmemory = 4e+09)
 # pts.ext <- DSMprops::parPTextr(sp = n.pts, gridlist = cov.grids, os = "linux",nthreads = 50)
 # ## Save points
-# saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_extracted.rds",sep=""))
+# saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_extracted_spatcovs.rds",sep=""))
 ## Updated extract for CONUS
 pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_extracted_spatcovs.rds",sep=""))
 pts.ext <- left_join(pts.ext, pts_geocode, by = "peiid")
@@ -110,22 +108,9 @@ pts.ext$tid <- "nasis"
 ## Join extracted pts to horizon data
 pts.ext.hor <- left_join(pts@horizons[pts@horizons$peiid %in% pts.ext$peiid,],pts.ext, by="peiid")
 
-#### Rock fragment prep
-## Read in gdb with rgdal to get sp object
-chfrags <- sf::st_read(dsn = ssurgo_fgdb, layer = "chfrags")
-chfrags[] <- lapply(chfrags, function(x) if (is.factor(x)) as.character(x) else {x})
-chkeys <- unique(pts.ext.hor$chkey)
-chfrags <- chfrags[chfrags$chkey %in% chkeys,]
-saveRDS(chfrags,paste0(predfolder,"/chfrags_conus.rds"))
-chfrags <- readRDS(paste0(predfolder,"/chfrags_conus.rds"))
-## Sum together rock frag vols for all recorded rock sizes for each horizon
-frags_chkey <- ddply(chfrags,~chkey,summarise,fragvol_r = sum(fragvol_r))
-pts.ext.hor <- left_join(pts.ext.hor,frags_chkey,by="chkey")
-pts.ext.hor$fragvol_r <- ifelse(is.na(pts.ext.hor$fragvol_r), 0, pts.ext.hor$fragvol_r) # NAs set to zero as these are not recorded in chfrags table
-
 ## Prep nasis training data for Random Forest
-pts.ext.hor$prop <- pts.ext.hor$fragvol_r ## UPDATE EVERY TIME
-prop <- "fragvol_r" ## Dependent variable
+pts.ext.hor$prop <- pts.ext.hor$gypsum_r ## UPDATE EVERY TIME
+prop <- "gypsum_r" ## Dependent variable
 hist(pts.ext.hor$prop)
 summary(pts.ext.hor$prop)
 ## Set transformation and scaling: UPDATE EVERY TIME!!!!!!!!!!!!!!!!
@@ -138,17 +123,17 @@ datastretchlab <- paste(datastretch,"x",sep="")
 ## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
 con <- dbConnect(RSQLite::SQLite(), "/push/Hyb100m_gdrv/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
 (ldm_names <- dbListTables(con))
-ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy","Supplementary_Tier_3"), function(x) dbReadTable(con , x))
-names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy","Supplementary_Tier_3")
+ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","pH_and_Carbonates","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
+names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","pH_and_Carbonates","NCSS_Pedon_Taxonomy")
 dbDisconnect(con)
 
 ## Now wrangle tables
-scd.hor <- inner_join(ldm$NCSS_Layer,ldm$Supplementary_Tier_3[!duplicated(ldm$Supplementary_Tier_3$labsampnum),],by="labsampnum")
+scd.hor <- inner_join(ldm$NCSS_Layer,ldm$pH_and_Carbonates[!duplicated(ldm$pH_and_Carbonates$labsampnum),],by="labsampnum")
 ldm$NCSS_Pedon_Taxonomy$peiid <- ldm$NCSS_Pedon_Taxonomy$pedoniid
 scd.pts <- ldm$NCSS_Site_Location
 scd.pts <- left_join(scd.pts,ldm$NCSS_Pedon_Taxonomy[ldm$NCSS_Pedon_Taxonomy$site_key %in% scd.pts$site_key, c("site_key","peiid")], by="site_key")
 
-### SCD prep: Weed out points with imprecise coordinates ###
+# ### SCD prep: Weed out points with imprecise coordinates ###
 scd.pts$latnchar <- nchar(abs(scd.pts$latitude_decimal))
 scd.pts$longnchar <- nchar(abs(scd.pts$longitude_decima))
 scd.pts <- subset(scd.pts, scd.pts$latnchar > 5 & scd.pts$longnchar > 6)
@@ -169,7 +154,7 @@ scd.pts <- scd.pts[polybound,]
 ## Extract covariates for prediction onto SCD points
 # scd.pts.ext <- DSMprops::parPTextr(scd.pts, cov.grids, os = "linux", nthreads=50)
 # ## Save scd pts with extraction
-# saveRDS(scd.pts.ext, paste(predfolder,"/SCD","_extracted.rds",sep=""))
+# saveRDS(scd.pts.ext, paste(predfolder,"/SCD","_extracted_spatcovs.rds",sep=""))
 scd.pts.ext <- readRDS(paste(predfolder,"/SCD","_extracted_spatcovs.rds",sep=""))
 ## Create geo-coordinate quality weights
 scd.pts.ext$date <- as.Date(scd.pts.ext$site_obsdate, format = "%m/%d/%Y")
@@ -185,16 +170,13 @@ scd.pts.ext$geo_wt <- ifelse(scd.pts.ext$geo_wt == 8 & scd.pts.ext$date >= "2000
 scd.pts.ext.hor <- inner_join(scd.hor,scd.pts.ext, by="site_key")
 scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzn_bot,scd.pts.ext.hor$locid,sep="_") # compound ID to remove horizon duplicates
 scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
-## Some cleanup specific to vfg2: 86k NAs?
-scd.pts.ext.hor$vfg2 <- ifelse(scd.pts.ext.hor$vfg2 >100, 100, scd.pts.ext.hor$vfg2) # 8 instances had high values
-##### scd.pts.ext.hor$vfg2 <- ifelse(is.na(scd.pts.ext.hor$vfg2), 0, scd.pts.ext.hor$vfg2) ### need to figure out the 125 NAs!
-
+## Clean up NAs from pH_carbonate table (NA's given to layers that were not tested due to no suspected gypsum) -> Set to zero
+scd.pts.ext.hor[is.na(scd.pts.ext.hor$gypl20),"gypl20"] <- 0
 
 ## SCD prep for RF
-scd.pts.ext.hor$prop <- scd.pts.ext.hor$vfg2 ## UPDATE everytime!
-scdprop <- "vfg2"
+scd.pts.ext.hor$prop <- scd.pts.ext.hor$gypl20 ## UPDATE everytime!
+scdprop <- "gypl20"
 scd.pts.ext.hor$tid <- "scd"
-
 
 ## Prep base raster for density calculations and spatial cross validation
 # rasterOptions(maxmemory = 5e+08,chunksize = 5e+07)
@@ -277,11 +259,23 @@ for(d in depths){
   #### summarize RPI in full raster prediction using sample for speed (tested against full average)
   ## Determine 95% interquartile range for relative prediction interval
   varrange_gRPI <- as.numeric(quantile(pts.extcc@data$prop, probs=c(0.975), na.rm=T)-quantile(pts.extcc@data$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
+  if(varrange_gRPI == 0) {varrange_gRPI <- as.numeric(quantile(pts.extcc@data$prop, probs=c(0.995), na.rm=T)-quantile(pts.extcc@data$prop, probs=c(0.005),na.rm=T))}
+  if(varrange_gRPI == 0) {varrange_gRPI <- as.numeric(max(pts.extcc@data$prop, na.rm=T)-min(pts.extcc@data$prop,na.rm=T))}
   gRPI_rf <- ranger(formulaStringRF, data=pts.extcc@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 60,
-                    min.node.size = trn.params$min.node.size)
+                    min.node.size = trn.params$min.node.size, importance = "impurity")
   ## Predict onto random gRPI sample pts
   pts.gRPI$lowpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.025))$predictions
   pts.gRPI$highpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.975))$predictions
+  ## Back transformation if necessary
+  if(trans=="log10") {pts.gRPI$lowpred <- (10^(pts.gRPI$lowpred) - 0.1)
+  pts.gRPI$highpred <- (10^(pts.gRPI$highpred) - 0.1)
+  }
+  if(trans=="log") {pts.gRPI$lowpred <- (exp(pts.gRPI$lowpred) - 1)
+  pts.gRPI$highpred <- (exp(pts.gRPI$highpred) - 1)
+  }
+  if(trans=="sqrt") {pts.gRPI$lowpred <- ((pts.gRPI$lowpred)^2)
+  pts.gRPI$highpred <- ((pts.gRPI$highpred)^2)
+  }
   pts.gRPI$RPI <- (pts.gRPI$highpred - pts.gRPI$lowpred) / varrange_gRPI
   gRPI.ave <- mean(pts.gRPI$RPI)
   gRPI.med <- median(pts.gRPI$RPI)
@@ -343,8 +337,13 @@ for(d in depths){
     ptseval <- ptseval[(ptseval@data$mtchtype=="scd"&ptseval@data$geo_wt<8)|(ptseval@data$geo_cls %in% geo_levs),]
     nfolds <- 10
     resol <- resol_rpi # kilometers
-    ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
-                                        rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux",casewts = "tot_wts")
+    if(is.na(resol_rpi > 0)){
+      ptsevalcv <- DSMprops::CVranger(x = ptseval, fm = formulaStringRF, train.params = trn.params,
+                                      nfolds = nfolds, nthreads = 60, os = "linux") # In case normal CV chosen
+    } else {
+      ptsevalcv <- DSMprops::SpatCVranger(sp = ptseval, fm = formulaStringRF, train.params = trn.params,
+                                          rast = img10kf, nfolds = nfolds, nthreads = 60, resol = resol, os = "linux",casewts = "tot_wts")
+    }
     ptsevalcv$cvgrid <- paste(colnames(levs),levs[1,],collapse="_",sep="_")
     return(ptsevalcv)
   }
@@ -505,7 +504,7 @@ for(d in depths){
   #                               feat_wts = ifelse(feat_param == "none",1,feat_wts)) # feat wts
   ## Save training points file
   saveRDS(pts.pcv, paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
-  # pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
+  pts.pcv <- readRDS(paste(predfolder,"/TrainPTS_", prop, '_',d, "_cm.rds",sep=""))
 
   ###### Cross validation plots
   ## All data
@@ -528,7 +527,7 @@ for(d in depths){
   #gplt.dcm.2D.CV.SCD
   ggsave(paste(predfolder,'/ValPlot_1to1_scd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.SCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
   ## Now just with SCD pedons with GPS or after 2010
-  gplt.dcm.2D.CV.gSCD <- ggplot(data=bestvalwtpts[bestvalwtpts$mtchtype=="scd"&(bestvalwtpts$geo_cls=="gps"|bestvalwtpts$geo_cls=="gps2"),], aes(prop_t, pcvpred)) +
+  gplt.dcm.2D.CV.gSCD <- ggplot(data=bestvalwtpts[bestvalwtpts$mtchtype=="scd"&(bestvalwtpts$geo_cls=="gps"|bestvalwtpts$geo_cls=="gps2"|bestvalwtpts$geo_cls=="gps3"),], aes(prop_t, pcvpred)) +
     stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1)  + #xlim(-5,105) + ylim(-5,105) +
     theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
     xlab("gps SCD Measured") + ylab("CV Prediction") + scale_fill_gradientn( name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
@@ -543,12 +542,17 @@ for(d in depths){
   ## TODO incorporate updated weighting or tuning parameters???????
   ## Determine 95% interquartile range for relative prediction interval
   varrange <- as.numeric(quantile(pts.pcv@data$prop, probs=c(0.975), na.rm=T)-quantile(pts.pcv@data$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
+  if(varrange == 0) {varrange <- as.numeric(quantile(pts.pcv@data$prop, probs=c(0.995), na.rm=T)-quantile(pts.pcv@data$prop, probs=c(0.005),na.rm=T))}
+  if(varrange == 0) {varrange <- as.numeric(max(pts.pcv@data$prop, na.rm=T)-min(pts.pcv@data$prop,na.rm=T))}
   ## Train global ranger model
   rf.qrf <- ranger(formulaStringRF, data=pts.pcv@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 60,
                    min.node.size = trn.params$min.node.size,
-                   case.weights = pts.pcv$tot_wts)
+                   importance = "impurity") #case.weights = pts.pcv$tot_wts,
   ## OOB error
   # rf.qrf
+  ## Peak at importance
+  # imp <- data.frame(var=names(importance(rf.qrf)),imp_meas = unname(importance(rf.qrf)))
+  # imp[order(imp$imp_meas, decreasing = T),][1:30,]
   ## Linear Adjustment for bias in low and high predictions
   pts.pcv@data$trainpreds <- predict(rf.qrf, data=pts.pcv@data, num.threads = 60)$predictions
   attach(pts.pcv@data)
@@ -559,8 +563,8 @@ for(d in depths){
   saveRDS(rf.qrf, paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm.rds",sep=""))
   saveRDS(rf_lm_adj, paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm.rds",sep=""))
   ## Block to open prior files for updating work
-  # rf.qrf <- readRDS(paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm.rds",sep=""))
-  # rf_lm_adj <- readRDS(paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm.rds",sep=""))
+  rf.qrf <- readRDS(paste(predfolder,"/rangerQRF_", prop, '_',d, "_cm.rds",sep=""))
+  rf_lm_adj <- readRDS(paste(predfolder,"/rflmadj_RFmodel_",prop,"_", d, "_cm.rds",sep=""))
 
 
   ############################## Raster Preditions ######################################################
@@ -633,8 +637,8 @@ for(d in depths){
     if(trans=="log10"){
       smrest <- mean(10^(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
       bt.fnlm <- function(x) { # Duans smearing est
-      ind <-  ((10^(x))-0.1)*smrest
-      return(ind)
+        ind <-  ((10^(x))-0.1)*smrest
+        return(ind)
       }
       bt.fn <- function(x) {
         ind <-  (10^(x))-0.1
@@ -644,25 +648,25 @@ for(d in depths){
     if(trans=="log"){
       smrest <- mean(exp(pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj))
       bt.fnlm <- function(x) { # Duans smearing est
-      ind <-  ((exp(x))-1)*smrest
-      return(ind)
+        ind <-  ((exp(x))-1)*smrest
+        return(ind)
       }
       bt.fn <- function(x) {
         ind <-  (exp(x))-1
         return(ind)
       }
-      }
+    }
     if(trans=="sqrt"){
       smrest <- mean((pts.pcv@data$prop_t - pts.pcv@data$trainpredsadj)^2)
       bt.fnlm <- function(x) { # Duans smearing est
-      ind <-  (x^2)*smrest
-      return(ind)
+        ind <-  (x^2)*smrest
+        return(ind)
       }
       bt.fn <- function(x) {
         ind <-  x^2
         return(ind)
       }
-      }
+    }
     predh_bt <- clusterR(predh, calc, args=list(fun=bt.fn),progress='text')
     predl_bt <- clusterR(predl, calc, args=list(fun=bt.fn),progress='text')
     pred_bt <- clusterR(pred, calc, args=list(fun=bt.fn),progress='text')

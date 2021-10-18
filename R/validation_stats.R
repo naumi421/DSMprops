@@ -22,6 +22,11 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     model <- paste(prop,depth,"cm",sep="_")
     valtype <- pts.extpcv$valtype[1]
     varrange <- as.numeric(quantile(pts.extpcv$prop, probs=c(0.975), na.rm=T)-quantile(pts.extpcv$prop, probs=c(0.025),na.rm=T))
+    varrange_typ <- 0.95
+    if(varrange == 0) {varrange <- as.numeric(quantile(pts.extpcv$prop, probs=c(0.995), na.rm=T)-quantile(pts.extpcv$prop, probs=c(0.005),na.rm=T))
+    varrange_typ <- 0.99}
+    if(varrange == 0) {varrange <- as.numeric(max(pts.extpcv$prop, na.rm=T)-min(pts.extpcv$prop,na.rm=T))
+    varrange_typ <- 1.0}
     qrtrange <- as.numeric(quantile(pts.extpcv$prop_t, probs=c(0.75), na.rm=T)-quantile(pts.extpcv$prop_t, probs=c(0.25),na.rm=T))
     ## CV statistics: all data
     n <- length(pts.extpcv[,1])
@@ -69,7 +74,7 @@ valmetrics <- function(xlst, trans, varrange, prop, depth){
     RPI.cvmed <- median(pts.extpcv$RPI)
     PICP <- sum(ifelse(pts.extpcv$prop_bt <= pts.extpcv$pcvpredpre.975_bt & pts.extpcv$prop_bt >= pts.extpcv$pcvpredpre.025_bt,1,0))/length(pts.extpcv[,1])
     ## Create CV statistics table
-    CVdf <- data.frame(model, valtype, n, RMSE, Rsq, Rsqpre, Bias, QRMSE, QMedAE, RMSE_bt, Rsq_bt, MAE_bt, MedAE_bt, Bias_bt, RPI.cvave,RPI.cvmed,PICP)
+    CVdf <- data.frame(model, valtype, n, RMSE, Rsq, Rsqpre, Bias, QRMSE, QMedAE, RMSE_bt, Rsq_bt, MAE_bt, MedAE_bt, Bias_bt, RPI.cvave,RPI.cvmed,PICP,varrange_typ)
     if("cvgrid" %in% colnames(pts.extpcv)){CVdf$cvgrid <- pts.extpcv$cvgrid[1]}
     return(CVdf)
   }
