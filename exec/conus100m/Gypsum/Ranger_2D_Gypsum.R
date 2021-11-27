@@ -20,27 +20,27 @@ rm(required.packages, new.packages)
 rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 
 ## Key Folder Locations
-predfolder <- "/push/HYBconus100m/Gypsum"
-repofolder <- "/push/repos/DSMprops/exec/conus100m/Gypsum"
-covfolder <- "/push/SG100_covars"
-ptsfolder <- "/push/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
+predfolder <- "/nvme1/HYBconus100m/Gypsum_gRPI"
+repofolder <- "/nvme1/repos/DSMprops/exec/conus100m/Gypsum"
+covfolder <- "/nvme1/SG100_covars"
+ptsfolder <- "/nvme1/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
 
 ######## Load soil profile collection ##############
 ## Geographic coordinate quality levels
-pts_geocode <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/geocode_weighting.RDS") # From Dave White
-# pts_geocode_wt <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
+pts_geocode <- readRDS("/nvme1/Hyb100m_gdrv/2020_Pedons/geocode_weighting.RDS") # From Dave White
+# pts_geocode_wt <- readRDS("/nvme1/Hyb100m_gdrv/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
 pts_geocode$geo_wt <- pts_geocode$wt
 pts_geocode$wt <- NULL
 pts_geocode$peiid <- as.character(pts_geocode$peiid)
 # ## Pedon quality clases and weights
-# pts_qual_cls <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/pedonquality_weighting.RDS") # Dave White
+# pts_qual_cls <- readRDS("/nvme1/Hyb100m_gdrv/2020_Pedons/pedonquality_weighting.RDS") # Dave White
 # pts_qual_cls <- pts_qual_cls[!duplicated(pts_qual_cls$peiid),]
 ## Pedons with extracted SSUGO component data
 pts <- readRDS(paste(ptsfolder,"/NASIS_all_component_horizon_match_SPC_ssurgo20.rds",sep=""))
 pts.proj <- proj4string(pts)
 n.pts <- pts@site
 ## Bring in orig nasis points to eliminate those with partial coords
-load("/push/Hyb100m_gdrv/2020_Pedons/nasis_sites_20210325.RData") # object s
+load("/nvme1/Hyb100m_gdrv/2020_Pedons/nasis_sites_20210325.RData") # object s
 s$latnchar <- nchar(abs(s$y_std))
 s$longnchar <- nchar(abs(s$x_std))
 s <- subset(s, s$latnchar > 5 & s$longnchar > 6)
@@ -62,7 +62,7 @@ cov.proj <- projection(projgrid)
 n.pts <- spTransform(n.pts, CRS(cov.proj)) # project to match rasters
 
 ####### Polygon boundary if needed to clip down
-polybound <- readOGR("/ped/GIS_Archive/US_boundaries/states_21basic", "conus_bound")
+polybound <- readOGR("/media/sped/GIS_data/US_Census_500k/cb_2020_us_state_500k", "conus_bound")
 polybound <- spTransform(polybound, cov.proj)
 n.pts <- n.pts[polybound,]
 
@@ -121,7 +121,7 @@ datastretchlab <- paste(datastretch,"x",sep="")
 
 ##### Load and prep SCD data
 ## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
-con <- dbConnect(RSQLite::SQLite(), "/push/Hyb100m_gdrv/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
+con <- dbConnect(RSQLite::SQLite(), "/nvme1/Hyb100m_gdrv/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
 (ldm_names <- dbListTables(con))
 ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","pH_and_Carbonates","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
 names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","pH_and_Carbonates","NCSS_Pedon_Taxonomy")
@@ -170,7 +170,8 @@ scd.pts.ext$geo_wt <- ifelse(scd.pts.ext$geo_wt == 8 & scd.pts.ext$date >= "2000
 scd.pts.ext.hor <- inner_join(scd.hor,scd.pts.ext, by="site_key")
 scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzn_bot,scd.pts.ext.hor$locid,sep="_") # compound ID to remove horizon duplicates
 scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
-## Clean up NAs from pH_carbonate table (NA's given to layers that were not tested due to no suspected gypsum) -> Set to zero
+## Clean up NAs from pH_carbonate table (NA's given to layers that were not tested due to no suspected gypsum)
+## -> Set to zero, ONLY 89 NON-ZERO VALUES!
 scd.pts.ext.hor[is.na(scd.pts.ext.hor$gypl20),"gypl20"] <- 0
 
 ## SCD prep for RF
@@ -200,7 +201,7 @@ img10kfid <- img10kf
 values(img10kfid) <- 1:ncell(img10kfid)
 img10kfid <- overlay(stack(img10kfid,img10kf),fun=function(a,b){a*b})
 ## Bring in feature space weights reference distributions
-ft_wts_ref <- readRDS("/push/Hyb100m_gdrv/2020_Pedons/ref_df.RDS") # From Stephen Roecker, 5/3/2021
+ft_wts_ref <- readRDS("/nvme1/Hyb100m_gdrv/2020_Pedons/ref_df.RDS") # From Stephen Roecker, 5/3/2021
 
 ##### Loop to train and predict properties for all depths
 depths <- c(0,5,15,30,60,100,150)
@@ -219,7 +220,7 @@ for(d in depths){
   scd.pts.d$y_std <- scd.pts.d$latitude_decimal
   scd.pts.d$mtchtype <- "scd"
   scd.pts.d$tid <- "scd"
-  ## Check for duplicated pedons betweeen NASIS and SCD using buffers
+  ## Check for duplicated pedons between NASIS and SCD using buffers
   coordinates(scd.pts.d) <- ~ longitude_decima + latitude_decimal
   projection(scd.pts.d) <- cov.proj
   pts.buf <- n.pts[n.pts$peiid %in% pts.extcc$peiid,]
@@ -264,8 +265,9 @@ for(d in depths){
   gRPI_rf <- ranger(formulaStringRF, data=pts.extcc@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 60,
                     min.node.size = trn.params$min.node.size, importance = "impurity")
   ## Predict onto random gRPI sample pts
-  pts.gRPI$lowpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.025))$predictions
-  pts.gRPI$highpred <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60,type = "quantiles", quantiles = c(0.975))$predictions
+  gRPI_rf_quans <- predict(gRPI_rf, data=pts.gRPI, num.threads = 60, type = "quantiles", quantiles = c(0.025,0.975))
+  pts.gRPI$lowpred <- gRPI_rf_quans$predictions[,1]
+  pts.gRPI$highpred <- gRPI_rf_quans$predictions[,2]
   ## Back transformation if necessary
   if(trans=="log10") {pts.gRPI$lowpred <- (10^(pts.gRPI$lowpred) - 0.1)
   pts.gRPI$highpred <- (10^(pts.gRPI$highpred) - 0.1)
@@ -570,6 +572,8 @@ for(d in depths){
   ############################## Raster Preditions ######################################################
   ##### Reference covar rasters to use in prediction
   rasters <- stack(cov.grids)
+  # b <- brick(rasters)
+  rasters <- readAll(rasters) # Brings into active memory
   #names(rasters)
 
   ## Ranger Predict
@@ -581,7 +585,7 @@ for(d in depths){
   ## Predict onto covariate grid
   ## Parallelized predict
   rasterOptions(maxmemory = 7e+09,chunksize = 1e+09)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
-  beginCluster(50,type='SOCK')
+  beginCluster(60,type='SOCK')
   Sys.time()
   predl <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.025)),progress="text")
   Sys.time()

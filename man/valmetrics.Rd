@@ -4,14 +4,14 @@
 \alias{valmetrics}
 \title{Title Tabulate validation statistics}
 \usage{
-valmetrics(xlst, trans, varrange, prop, depth)
+valmetrics(xlst, trans, quants, prop, depth)
 }
 \arguments{
 \item{xlst}{list of data.frames or a dataframe of cross validation predictions}
 
 \item{trans}{character string data transformation type: "none", "log10", "log", or "sqrt"}
 
-\item{varrange}{numeric range of values representing the quantile interval used for uncertainty prediction intervals}
+\item{quants}{numeric vector with lower and upper quantiles for uncertainty prediction intervals}
 
 \item{prop}{character string name of property being modeled}
 

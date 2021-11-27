@@ -11,6 +11,7 @@ SpatCVranger(
   rast,
   resol,
   os = "windows",
+  quants,
   train.params,
   nthreads = detectCores() - 1,
   casewts = "tot_wts"
@@ -28,6 +29,8 @@ SpatCVranger(
 \item{resol}{integer resolution in kilometers for spatial validation block size}
 
 \item{os}{string. Operating system for implementation. Options are "windows" or "linux".}
+
+\item{quants}{numeric vector with lower and upper quantiles for uncertainty prediction intervals}
 
 \item{train.params}{List of training parameters for building random forest models.}
 
