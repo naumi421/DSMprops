@@ -418,7 +418,7 @@ for(d in depths){
   #cv.lst <- readRDS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep=""))
 
   ## Validation metrics for CVs at different spatial supports
-  valmets_sCV <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, prop = prop, depth = d)
+  valmets_sCV <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, quants = quants_vec, prop = prop, depth = d)
   valmets_sCV$RPIall <- (valmets_sCV$RPI.cvave + valmets_sCV$RPI.cvmed) / 2
   idx_val <- which(abs(valmets_sCV$RPIall-gRPI_best)==min(abs(valmets_sCV$RPIall-gRPI_best)))
   bestval <- valmets_sCV[idx_val,c("valtype")]
