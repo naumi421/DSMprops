@@ -15,7 +15,7 @@
 #' @return data.frame with original fields along with CV predictions
 #' @export
 #'
-gRPI_estim_ranger <- function(x, gsamp, fm, os = "windows", grid, train.params, nthreads = detectCores() - 1, casewts = "tot_wts"){
+gRPI_estim_ranger <- function(x, gsamp, fm, griddf, os = "windows", train.params, nthreads = detectCores() - 1, casewts = "tot_wts"){
 
   if(!validObject(train.params)){
     message('No train.params given, using default RF params: ntree=100, min.node.size=1')
