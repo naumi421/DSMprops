@@ -8,8 +8,8 @@ gRPI_estim_ranger(
   x,
   gsamp,
   fm,
+  griddf,
   os = "windows",
-  grid,
   train.params,
   nthreads = detectCores() - 1,
   casewts = "tot_wts"
@@ -22,6 +22,9 @@ gRPI_estim_ranger(
 
 \item{fm}{Formula to use for random forest model building}
 
+\item{griddf}{A data.frame with geographic 'geo' and source 'srce' field expanded in a factorial to select
+sample subsets for x.}
+
 \item{os}{string. Operating system for implementation. Options are "windows" or "linux".}
 
 \item{train.params}{List of training parameters for building random forest models.}
@@ -29,9 +32,6 @@ gRPI_estim_ranger(
 \item{nthreads}{Integer number of logical cores to use for parallelization of function.}
 
 \item{casewts}{Character name of field with case weights values}
-
-\item{griddf}{A data.frame with geographic 'geo' and source 'srce' field expanded in a factorial to select
-sample subsets for x.}
 }
 \value{
 data.frame with original fields along with CV predictions

@@ -32,11 +32,11 @@ gRPI_estim_ranger <- function(x, gsamp, fm, griddf, os = "windows", train.params
   ## Linux CV function implementation in forked parallel list apply
   if(os == "linux"){
     set.seed(420)
-    fnthreads <- ifelse(nthreads > nfolds, floor((nthreads - nfolds)/nfolds), 1)
-    lappthreads <- ifelse(nthreads >= nfolds, nfolds, nthreads)
+    fnthreads <- ifelse(nthreads > nrow(griddf), floor((nthreads - nrow(griddf))/nrow(griddf)), 1)
+    lappthreads <- ifelse(nthreads >= nrow(griddf), nrow(griddf), nthreads)
     gRPI_RF <- function(g){#,pts.extcvm, formulaStringCVm){
-      levs <- data.frame(grid_vec[x,])
-      colnames(levs) <- colnames(grid_vec)
+      levs <- data.frame(griddf[x,])
+      colnames(levs) <- colnames(griddf)
       geo_levs <- str_split(levs$geo, "_")[[1]]
       srce_levs <- str_split(levs$srce, "_")[[1]]
       ptseval <- x
@@ -100,8 +100,8 @@ gRPI_estim_ranger <- function(x, gsamp, fm, griddf, os = "windows", train.params
   if(os == "windows"){
     set.seed(420)
     gRPI_RF <- function(g){#,pts.extcvm, formulaStringCVm){
-      levs <- data.frame(grid_vec[x,])
-      colnames(levs) <- colnames(grid_vec)
+      levs <- data.frame(griddf[x,])
+      colnames(levs) <- colnames(griddf)
       geo_levs <- str_split(levs$geo, "_")[[1]]
       srce_levs <- str_split(levs$srce, "_")[[1]]
       ptseval <- x
