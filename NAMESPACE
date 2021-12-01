@@ -3,5 +3,6 @@
 export(CVranger)
 export(SpatCVranger)
 export(feat_wts)
+export(gRPI_estim_ranger)
 export(parPTextr)
 export(valmetrics)
