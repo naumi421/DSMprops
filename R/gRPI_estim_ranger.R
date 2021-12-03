@@ -35,7 +35,7 @@ gRPI_estim_ranger <- function(x, gsamp, fm, griddf, os = "windows", train.params
     fnthreads <- ifelse(nthreads > nrow(griddf), floor((nthreads - nrow(griddf))/nrow(griddf)), 1)
     lappthreads <- ifelse(nthreads >= nrow(griddf), nrow(griddf), nthreads)
     gRPI_RF <- function(g){#,pts.extcvm, formulaStringCVm){
-      levs <- data.frame(griddf[x,])
+      levs <- data.frame(griddf[g,])
       colnames(levs) <- colnames(griddf)
       geo_levs <- str_split(levs$geo, "_")[[1]]
       srce_levs <- str_split(levs$srce, "_")[[1]]
@@ -100,7 +100,7 @@ gRPI_estim_ranger <- function(x, gsamp, fm, griddf, os = "windows", train.params
   if(os == "windows"){
     set.seed(420)
     gRPI_RF <- function(g){#,pts.extcvm, formulaStringCVm){
-      levs <- data.frame(griddf[x,])
+      levs <- data.frame(griddf[g,])
       colnames(levs) <- colnames(griddf)
       geo_levs <- str_split(levs$geo, "_")[[1]]
       srce_levs <- str_split(levs$srce, "_")[[1]]
