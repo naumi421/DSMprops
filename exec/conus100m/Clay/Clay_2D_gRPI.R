@@ -308,6 +308,7 @@ for(d in depths){
   subsets <- as.vector(subset.increm)
   rfe_tab <- data.frame(var_idx = nrow(vars.imp), rsq = rf.rfe.init$r.squared)
   for(s in 1:(num.subsets-2)){subsets <- append(subsets,subsets[length(subsets)]+subset.increm)}
+  subsets <- subset(subsets, subsets > 20) # Decision to include at least 30 vars so one odd var doesn't dominate and create weird patterns
   set.seed(12)
   ranger_rfe_fn <- function(ss){
     subsvars <- vars.imp$var[(nrow(vars.imp)-ss):nrow(vars.imp)]

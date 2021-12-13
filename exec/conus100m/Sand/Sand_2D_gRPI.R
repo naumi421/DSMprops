@@ -20,7 +20,7 @@ rm(required.packages, new.packages)
 rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 
 ## Key Folder Locations
-predfolder <- "/nvme1/HYBconus100m/Gypsum_gRPI"
+predfolder <- "/nvme1/HYBconus100m/Clay_gRPI"
 repofolder <- "/nvme1/repos/DSMprops"
 covfolder <- "/nvme1/SG100_covars"
 ptsfolder <- "/nvme1/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
@@ -112,26 +112,26 @@ pts.ext$tid <- "nasis"
 pts.ext.hor <- left_join(pts@horizons[pts@horizons$peiid %in% pts.ext$peiid,],pts.ext, by="peiid")
 
 ## Prep nasis training data for Random Forest
-pts.ext.hor$prop <- pts.ext.hor$gypsum_r ## UPDATE EVERY TIME
-prop <- "gypsum_r" ## Dependent variable
+pts.ext.hor$prop <- pts.ext.hor$sandtotal_r  ## UPDATE EVERY TIME
+prop <- "sandtotal_r " ## Dependent variable
 hist(pts.ext.hor$prop)
 summary(pts.ext.hor$prop)
 ## Set transformation and scaling: UPDATE EVERY TIME!!!!!!!!!!!!!!!!
-trans <- "log" # none, log10, log, or sqrt
-data_type <- "INT2U" # from raster::dataType - INT1U, INT1S, INT2S, INT2U, INT4S, INT4U, FLT4S, FLT8S
-datastretch <- 10
+trans <- "none" # none, log10, log, or sqrt
+data_type <- "INT1U" # from raster::dataType - INT1U, INT1S, INT2S, INT2U, INT4S, INT4U, FLT4S, FLT8S
+datastretch <- 1
 datastretchlab <- paste(datastretch,"x",sep="")
 
 ##### Load and prep SCD data
 ## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
 con <- dbConnect(RSQLite::SQLite(), "/nvme1/Hyb100m_gdrv/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
 (ldm_names <- dbListTables(con))
-ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","pH_and_Carbonates","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
-names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","pH_and_Carbonates","NCSS_Pedon_Taxonomy")
+ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
+names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy")
 dbDisconnect(con)
 
 ## Now wrangle tables
-scd.hor <- inner_join(ldm$NCSS_Layer,ldm$pH_and_Carbonates[!duplicated(ldm$pH_and_Carbonates$labsampnum),],by="labsampnum")
+scd.hor <- inner_join(ldm$NCSS_Layer,ldm$PSDA_and_Rock_Fragments[!duplicated(ldm$PSDA_and_Rock_Fragments$labsampnum),],by="labsampnum")
 ldm$NCSS_Pedon_Taxonomy$peiid <- ldm$NCSS_Pedon_Taxonomy$pedoniid
 scd.pts <- ldm$NCSS_Site_Location
 scd.pts <- left_join(scd.pts,ldm$NCSS_Pedon_Taxonomy[ldm$NCSS_Pedon_Taxonomy$site_key %in% scd.pts$site_key, c("site_key","peiid")], by="site_key")
@@ -173,14 +173,14 @@ scd.pts.ext$geo_wt <- ifelse(scd.pts.ext$geo_wt == 8 & scd.pts.ext$date >= "2000
 scd.pts.ext.hor <- inner_join(scd.hor,scd.pts.ext, by="site_key")
 scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzn_bot,scd.pts.ext.hor$locid,sep="_") # compound ID to remove horizon duplicates
 scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
-## Clean up NAs from pH_carbonate table (NA's given to layers that were not tested due to no suspected gypsum)
-## -> Set to zero, ONLY 89 NON-ZERO VALUES!
-scd.pts.ext.hor[is.na(scd.pts.ext.hor$gypl20),"gypl20"] <- 0
 
 ## SCD prep for RF
-scd.pts.ext.hor$prop <- scd.pts.ext.hor$gypl20 ## UPDATE everytime!
-scdprop <- "gypl20"
+scd.pts.ext.hor$prop <- scd.pts.ext.hor$sand_tot_psa ## UPDATE everytime!
+scdprop <- "sand_tot_psa"
 scd.pts.ext.hor$tid <- "scd"
+hist(scd.pts.ext.hor$prop)
+summary(scd.pts.ext.hor$prop)
+scd.pts.ext.hor <- subset(scd.pts.ext.hor, scd.pts.ext.hor$prop >= 0) # 10 negative values - not possible for clay.
 
 ## Prep base raster for density calculations and spatial cross validation
 # rasterOptions(maxmemory = 5e+08,chunksize = 5e+07)
@@ -271,7 +271,7 @@ for(d in depths){
   ## Call function to estimate gRPI using each data subset as training data
   Sys.time()
   data_grid_df <- DSMprops::gRPI_estim_ranger(x = pts.extcc@data, gsamp = pts.gRPI, fm = formulaStringRF, griddf = grid_vec, os="linux",
-                                              train.params = trn.params, nthreads = 62)
+                                               train.params = trn.params, nthreads = 62)
   Sys.time()
 
   ## Now pick model mode ranking on gRPI and Rsq
@@ -300,7 +300,7 @@ for(d in depths){
   ########### Recursive feature elimination
   #The simulation will fit models a set number of covariate subsets based on an initial full model variable importance
   rf.rfe.init <- ranger(formulaStringRF, data=pts.pcv@data, num.trees = trn.params$ntrees, num.threads = 60,
-                        min.node.size = trn.params$min.node.size, importance = "permutation")
+                   min.node.size = trn.params$min.node.size, importance = "permutation")
   vars.imp <- data.frame(import = unname(rf.rfe.init$variable.importance), var = names(rf.rfe.init$variable.importance))
   vars.imp <- vars.imp[order(vars.imp$import),]
   num.subsets <- 16
@@ -467,7 +467,7 @@ for(d in depths){
   ## Train global ranger model
   rf.qrf <- ranger(formulaStringRF_RFE, data=pts.pcv@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 60,
                    min.node.size = trn.params$min.node.size,
-                   importance = "impurity") #case.weights = pts.pcv$tot_wts,
+                   importance = "permutation") #case.weights = pts.pcv$tot_wts,
   ## OOB error
   # rf.qrf
   ## Peak at importance
