@@ -20,30 +20,30 @@ rm(required.packages, new.packages)
 rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 
 ## Key Folder Locations
-predfolder <- "/nvme1/HYBconus100m/Sand_gRPI"
-repofolder <- "/nvme1/repos/DSMprops"
-covfolder <- "/nvme1/SG100_covars"
-ptsfolder <- "/nvme1/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
+predfolder <- "/home/tnaum/data/HYBconus100m/VeryFineSand_gRPI"
+repofolder <- "/home/tnaum/data/repos/DSMprops"
+covfolder <- "/home/tnaum/data/SG100_covars"
+ptsfolder <- "/home/tnaum/data/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
 
 ## Sourced functions
 source(paste0(repofolder,"/exec/covar_dev/rfe_rangerFuncs.R"))
 
 ######## Load soil profile collection ##############
 ## Geographic coordinate quality levels
-pts_geocode <- readRDS("/nvme1/Hyb100m_gdrv/2020_Pedons/geocode_weighting.RDS") # From Dave White
-# pts_geocode_wt <- readRDS("/nvme1/Hyb100m_gdrv/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
+pts_geocode <- readRDS("/media/sped/Hyb100m_gdrv/2020_Pedons/geocode_weighting.RDS") # From Dave White
+# pts_geocode_wt <- readRDS("/home/tnaum/data/Hyb100m_gdrv/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
 pts_geocode$geo_wt <- pts_geocode$wt
 pts_geocode$wt <- NULL
 pts_geocode$peiid <- as.character(pts_geocode$peiid)
 # ## Pedon quality clases and weights
-# pts_qual_cls <- readRDS("/nvme1/Hyb100m_gdrv/2020_Pedons/pedonquality_weighting.RDS") # Dave White
+# pts_qual_cls <- readRDS("/home/tnaum/data/Hyb100m_gdrv/2020_Pedons/pedonquality_weighting.RDS") # Dave White
 # pts_qual_cls <- pts_qual_cls[!duplicated(pts_qual_cls$peiid),]
 ## Pedons with extracted SSUGO component data
 pts <- readRDS(paste(ptsfolder,"/NASIS_all_component_horizon_match_SPC_ssurgo20.rds",sep=""))
 pts.proj <- proj4string(pts)
 n.pts <- pts@site
 ## Bring in orig nasis points to eliminate those with partial coords
-load("/nvme1/Hyb100m_gdrv/2020_Pedons/nasis_sites_20210325.RData") # object s
+load("/media/sped/Hyb100m_gdrv/2020_Pedons/nasis_sites_20210325.RData") # object s
 s$latnchar <- nchar(abs(s$y_std))
 s$longnchar <- nchar(abs(s$x_std))
 s <- subset(s, s$latnchar > 5 & s$longnchar > 6)
@@ -112,8 +112,8 @@ pts.ext$tid <- "nasis"
 pts.ext.hor <- left_join(pts@horizons[pts@horizons$peiid %in% pts.ext$peiid,],pts.ext, by="peiid")
 
 ## Prep nasis training data for Random Forest
-pts.ext.hor$prop <- pts.ext.hor$sandtotal_r  ## UPDATE EVERY TIME
-prop <- "sandtotal_r " ## Dependent variable
+pts.ext.hor$prop <- pts.ext.hor$sandvf_r  ## UPDATE EVERY TIME
+prop <- "sandvf_r " ## Dependent variable
 hist(pts.ext.hor$prop)
 summary(pts.ext.hor$prop)
 ## Set transformation and scaling: UPDATE EVERY TIME!!!!!!!!!!!!!!!!
@@ -124,7 +124,7 @@ datastretchlab <- paste(datastretch,"x",sep="")
 
 ##### Load and prep SCD data
 ## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
-con <- dbConnect(RSQLite::SQLite(), "/nvme1/Hyb100m_gdrv/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
+con <- dbConnect(RSQLite::SQLite(), "/media/sped/Hyb100m_gdrv/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
 (ldm_names <- dbListTables(con))
 ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
 names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy")
@@ -175,8 +175,8 @@ scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzn_bot,scd.pts.ext.hor$l
 scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
 
 ## SCD prep for RF
-scd.pts.ext.hor$prop <- scd.pts.ext.hor$sand_tot_psa ## UPDATE everytime!
-scdprop <- "sand_tot_psa"
+scd.pts.ext.hor$prop <- scd.pts.ext.hor$sand_vf_psa  ## UPDATE everytime!
+scdprop <- "sand_vf_psa"
 scd.pts.ext.hor$tid <- "scd"
 hist(scd.pts.ext.hor$prop)
 summary(scd.pts.ext.hor$prop)
@@ -204,7 +204,7 @@ img10kfid <- img10kf
 values(img10kfid) <- 1:ncell(img10kfid)
 img10kfid <- overlay(stack(img10kfid,img10kf),fun=function(a,b){a*b})
 ## Bring in feature space weights reference distributions
-ft_wts_ref <- readRDS("/nvme1/Hyb100m_gdrv/2020_Pedons/ref_df.RDS") # From Stephen Roecker, 5/3/2021
+ft_wts_ref <- readRDS("/media/sped/Hyb100m_gdrv/2020_Pedons/ref_df.RDS") # From Stephen Roecker, 5/3/2021
 
 ##### Loop to train and predict properties for all depths
 depths <- c(0,5,15,30,60,100,150)
