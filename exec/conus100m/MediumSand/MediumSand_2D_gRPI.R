@@ -20,7 +20,7 @@ rm(required.packages, new.packages)
 rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 
 ## Key Folder Locations
-predfolder <- "/home/tnaum/data/HYBconus100m/VeryFineSand_gRPI"
+predfolder <- "/home/tnaum/data/HYBconus100m/MediumSand_gRPI"
 repofolder <- "/home/tnaum/data/repos/DSMprops"
 covfolder <- "/home/tnaum/data/SG100_covars"
 ptsfolder <- "/home/tnaum/data/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
@@ -112,8 +112,8 @@ pts.ext$tid <- "nasis"
 pts.ext.hor <- left_join(pts@horizons[pts@horizons$peiid %in% pts.ext$peiid,],pts.ext, by="peiid")
 
 ## Prep nasis training data for Random Forest
-pts.ext.hor$prop <- pts.ext.hor$sandvf_r  ## UPDATE EVERY TIME
-prop <- "sandvf_r " ## Dependent variable
+pts.ext.hor$prop <- pts.ext.hor$sandmed_r  ## UPDATE EVERY TIME
+prop <- "sandmed_r" ## Dependent variable
 hist(pts.ext.hor$prop)
 summary(pts.ext.hor$prop)
 ## Set transformation and scaling: UPDATE EVERY TIME!!!!!!!!!!!!!!!!
@@ -175,8 +175,8 @@ scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzn_bot,scd.pts.ext.hor$l
 scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
 
 ## SCD prep for RF
-scd.pts.ext.hor$prop <- scd.pts.ext.hor$sand_vf_psa  ## UPDATE everytime!
-scdprop <- "sand_vf_psa"
+scd.pts.ext.hor$prop <- scd.pts.ext.hor$sand_m_psa  ## UPDATE everytime!
+scdprop <- "sand_m_psa"
 scd.pts.ext.hor$tid <- "scd"
 hist(scd.pts.ext.hor$prop)
 summary(scd.pts.ext.hor$prop)
