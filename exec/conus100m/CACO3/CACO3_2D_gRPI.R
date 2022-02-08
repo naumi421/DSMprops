@@ -20,23 +20,23 @@ rm(required.packages, new.packages)
 rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 
 ## Key Folder Locations
-predfolder <- "/home/tnaum/data/HYBconus100m/Gypsum_gRPI/untrans"
+predfolder <- "/home/tnaum/data/HYBconus100m/CACO3_gRPI"
 repofolder <- "/home/tnaum/data/repos/DSMprops"
 covfolder <- "/home/tnaum/data/SG100_covars"
 ptsfolder <- "/home/tnaum/data/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
 
-## Sourced functions
-source(paste0(repofolder,"/exec/covar_dev/rfe_rangerFuncs.R"))
+# ## Sourced functions
+# source(paste0(repofolder,"/exec/covar_dev/rfe_rangerFuncs.R"))
 
 ######## Load soil profile collection ##############
 ## Geographic coordinate quality levels
 pts_geocode <- readRDS("/media/sped/Hyb100m_gdrv/2020_Pedons/geocode_weighting.RDS") # From Dave White
-# pts_geocode_wt <- readRDS("/media/sped/Hyb100m_gdrv/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
+# pts_geocode_wt <- readRDS("/home/tnaum/data/Hyb100m_gdrv/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
 pts_geocode$geo_wt <- pts_geocode$wt
 pts_geocode$wt <- NULL
 pts_geocode$peiid <- as.character(pts_geocode$peiid)
 # ## Pedon quality clases and weights
-# pts_qual_cls <- readRDS("/media/sped/Hyb100m_gdrv/2020_Pedons/pedonquality_weighting.RDS") # Dave White
+# pts_qual_cls <- readRDS("/home/tnaum/data/Hyb100m_gdrv/2020_Pedons/pedonquality_weighting.RDS") # Dave White
 # pts_qual_cls <- pts_qual_cls[!duplicated(pts_qual_cls$peiid),]
 ## Pedons with extracted SSUGO component data
 pts <- readRDS(paste(ptsfolder,"/NASIS_all_component_horizon_match_SPC_ssurgo20.rds",sep=""))
@@ -112,14 +112,14 @@ pts.ext$tid <- "nasis"
 pts.ext.hor <- left_join(pts@horizons[pts@horizons$peiid %in% pts.ext$peiid,],pts.ext, by="peiid")
 
 ## Prep nasis training data for Random Forest
-pts.ext.hor$prop <- pts.ext.hor$gypsum_r ## UPDATE EVERY TIME
-prop <- "gypsum_r" ## Dependent variable
+pts.ext.hor$prop <- pts.ext.hor$caco3_r  ## UPDATE EVERY TIME
+prop <- "caco3_r" ## Dependent variable
 hist(pts.ext.hor$prop)
 summary(pts.ext.hor$prop)
 ## Set transformation and scaling: UPDATE EVERY TIME!!!!!!!!!!!!!!!!
-trans <- "none" # none, log10, log, or sqrt
+trans <- "log" # none, log10, log, or sqrt
 data_type <- "INT2U" # from raster::dataType - INT1U, INT1S, INT2S, INT2U, INT4S, INT4U, FLT4S, FLT8S
-datastretch <- 10
+datastretch <- 100
 datastretchlab <- paste(datastretch,"x",sep="")
 
 ##### Load and prep SCD data
@@ -173,14 +173,15 @@ scd.pts.ext$geo_wt <- ifelse(scd.pts.ext$geo_wt == 8 & scd.pts.ext$date >= "2000
 scd.pts.ext.hor <- inner_join(scd.hor,scd.pts.ext, by="site_key")
 scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzn_bot,scd.pts.ext.hor$locid,sep="_") # compound ID to remove horizon duplicates
 scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
-## Clean up NAs from pH_carbonate table (NA's given to layers that were not tested due to no suspected gypsum)
-## -> Set to zero, ONLY 89 NON-ZERO VALUES!
-scd.pts.ext.hor[is.na(scd.pts.ext.hor$gypl20),"gypl20"] <- 0
 
 ## SCD prep for RF
-scd.pts.ext.hor$prop <- scd.pts.ext.hor$gypl20 ## UPDATE everytime!
-scdprop <- "gypl20"
+scd.pts.ext.hor$prop <- scd.pts.ext.hor$caco3  ## UPDATE everytime!
+scdprop <- "caco3"
 scd.pts.ext.hor$tid <- "scd"
+hist(scd.pts.ext.hor$prop)
+summary(scd.pts.ext.hor$prop)
+scd.pts.ext.hor$prop <- ifelse(is.na(scd.pts.ext.hor$prop),0, scd.pts.ext.hor$prop) ## Sites not measured assumed to not have caco3 present (easy to eliminate)
+scd.pts.ext.hor <- subset(scd.pts.ext.hor, scd.pts.ext.hor$prop <= 100) # Eliminating erroneous high values
 
 ## Prep base raster for density calculations and spatial cross validation
 # rasterOptions(maxmemory = 5e+08,chunksize = 5e+07)
@@ -271,7 +272,7 @@ for(d in depths){
   ## Call function to estimate gRPI using each data subset as training data
   Sys.time()
   data_grid_df <- DSMprops::gRPI_estim_ranger(x = pts.extcc@data, gsamp = pts.gRPI, fm = formulaStringRF, griddf = grid_vec, os="linux",
-                                              train.params = trn.params, nthreads = 62)
+                                               train.params = trn.params, nthreads = 62)
   Sys.time()
 
   ## Now pick model mode ranking on gRPI and Rsq
@@ -285,9 +286,8 @@ for(d in depths){
   ## Save RPI table
   write.table(data_grid_df, paste(predfolder,"/gRPIs_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
   data_grid_df <- read.delim(paste(predfolder,"/gRPIs_", prop,"_", d, "_cm.txt",sep=""),stringsAsFactors = F)
-  ## Select points from overall dataset based on combined rankings: Had to modify for gypsum due to skew issues
-  model_params <- str_split(data_grid_df[data_grid_df$datagrid=="geo_gps_gps2_gps3_srce_scd_direct_home",c("datagrid")][1],"_")[[1]] # mod for gypsum
-  #model_params <- str_split(data_grid_df[data_grid_df$rank_final==min(data_grid_df$rank_final),c("datagrid")][1],"_")[[1]] # mod for gypsum
+  ## Select points from overall dataset based on combined rankings
+  model_params <- str_split(data_grid_df[data_grid_df$rank_final==min(data_grid_df$rank_final),c("datagrid")][1],"_")[[1]]
   quant_l <- data_grid_df[data_grid_df$rank_final==min(data_grid_df$rank_final),c("quant_l")]
   quant_h <- data_grid_df[data_grid_df$rank_final==min(data_grid_df$rank_final),c("quant_h")]
   quants_vec <- c(quant_l,quant_h)
@@ -301,7 +301,7 @@ for(d in depths){
   ########### Recursive feature elimination
   #The simulation will fit models a set number of covariate subsets based on an initial full model variable importance
   rf.rfe.init <- ranger(formulaStringRF, data=pts.pcv@data, num.trees = trn.params$ntrees, num.threads = 60,
-                        min.node.size = trn.params$min.node.size, importance = "permutation")
+                   min.node.size = trn.params$min.node.size, importance = "permutation")
   vars.imp <- data.frame(import = unname(rf.rfe.init$variable.importance), var = names(rf.rfe.init$variable.importance))
   vars.imp <- vars.imp[order(vars.imp$import),]
   num.subsets <- 16
@@ -468,7 +468,7 @@ for(d in depths){
   ## Train global ranger model
   rf.qrf <- ranger(formulaStringRF_RFE, data=pts.pcv@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 60,
                    min.node.size = trn.params$min.node.size,
-                   importance = "impurity") #case.weights = pts.pcv$tot_wts,
+                   importance = "permutation") #case.weights = pts.pcv$tot_wts,
   ## OOB error
   # rf.qrf
   ## Peak at importance
@@ -539,7 +539,7 @@ for(d in depths){
     # PIwidth <- clusterR(s, overlay, args=list(fun=PIwidth.fn),progress = "text")
     # # Determine 95% interquantile range of original training data for horizons that include the depth being predicted
     PIrelwidth.fn <- function(a,b) {
-      ind <- ((a-b)/varrange)*100
+      ind <- ((a-b)/varrange)*1000
       return(ind)
     }
     PIrelwidth <- clusterR(s, overlay, args=list(fun=PIrelwidth.fn),progress = "text",export='varrange')
@@ -553,7 +553,7 @@ for(d in depths){
     writeRaster(predlmsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRFadj.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
     writeRaster(predlsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_l.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
     writeRaster(predhsc, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",datastretchlab,"_",d,"_cm_2D_QRF_95PI_h.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype=data_type, progress="text")
-    writeRaster(PIrelwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_100x_",d,"_cm_2D_QRF_95PI_relwidth.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
+    writeRaster(PIrelwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_1000x_",d,"_cm_2D_QRF_95PI_relwidth.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"),datatype='INT2U', progress="text")
     # # writeRaster(PIwidth, overwrite=TRUE,filename=paste(predfolder,"/",prop,"_",d,"_cm_2D_QRF_95PI_width.tif",sep=""), options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text")
   } else {
     ## Back transformation Stuff
