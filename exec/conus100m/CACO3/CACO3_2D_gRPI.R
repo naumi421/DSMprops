@@ -132,26 +132,26 @@ dbDisconnect(con)
 
 ## Now wrangle tables
 scd.hor <- inner_join(ldm$NCSS_Layer,ldm$pH_and_Carbonates[!duplicated(ldm$pH_and_Carbonates$labsampnum),],by="labsampnum")
-ldm$NCSS_Pedon_Taxonomy$peiid <- ldm$NCSS_Pedon_Taxonomy$pedoniid
-scd.pts <- ldm$NCSS_Site_Location
-scd.pts <- left_join(scd.pts,ldm$NCSS_Pedon_Taxonomy[ldm$NCSS_Pedon_Taxonomy$site_key %in% scd.pts$site_key, c("site_key","peiid")], by="site_key")
-
-# ### SCD prep: Weed out points with imprecise coordinates ###
-scd.pts$latnchar <- nchar(abs(scd.pts$latitude_decimal))
-scd.pts$longnchar <- nchar(abs(scd.pts$longitude_decima))
-scd.pts <- subset(scd.pts, scd.pts$latnchar > 5 & scd.pts$longnchar > 6)
-## Location ID for later use and remove duplicates
-scd.pts$locid <- paste(scd.pts$latitude_decimal,scd.pts$longitude_decima,sep="_")
-scd.pts <- scd.pts[!duplicated(scd.pts$locid),] # Over 20k duplicates...
-scd.pts <- scd.pts[!duplicated(scd.pts$peiid),]
-
-### Turn into spatial file
-coordinates(scd.pts) <- ~ longitude_decima + latitude_decimal # Typos in sqlite KSSL snapshot...
-temp.proj <- CRS("+proj=longlat +datum=WGS84") ## specify projection
-projection(scd.pts) <- temp.proj
-# ######## Clip with boundary if necessary ###########
-scd.pts <- spTransform(scd.pts, cov.proj)
-scd.pts <- scd.pts[polybound,]
+# ldm$NCSS_Pedon_Taxonomy$peiid <- ldm$NCSS_Pedon_Taxonomy$pedoniid
+# scd.pts <- ldm$NCSS_Site_Location
+# scd.pts <- left_join(scd.pts,ldm$NCSS_Pedon_Taxonomy[ldm$NCSS_Pedon_Taxonomy$site_key %in% scd.pts$site_key, c("site_key","peiid")], by="site_key")
+#
+# # ### SCD prep: Weed out points with imprecise coordinates ###
+# scd.pts$latnchar <- nchar(abs(scd.pts$latitude_decimal))
+# scd.pts$longnchar <- nchar(abs(scd.pts$longitude_decima))
+# scd.pts <- subset(scd.pts, scd.pts$latnchar > 5 & scd.pts$longnchar > 6)
+# ## Location ID for later use and remove duplicates
+# scd.pts$locid <- paste(scd.pts$latitude_decimal,scd.pts$longitude_decima,sep="_")
+# scd.pts <- scd.pts[!duplicated(scd.pts$locid),] # Over 20k duplicates...
+# scd.pts <- scd.pts[!duplicated(scd.pts$peiid),]
+#
+# ### Turn into spatial file
+# coordinates(scd.pts) <- ~ longitude_decima + latitude_decimal # Typos in sqlite KSSL snapshot...
+# temp.proj <- CRS("+proj=longlat +datum=WGS84") ## specify projection
+# projection(scd.pts) <- temp.proj
+# # ######## Clip with boundary if necessary ###########
+# scd.pts <- spTransform(scd.pts, cov.proj)
+# scd.pts <- scd.pts[polybound,]
 
 ## Further SCD prep
 ## Extract covariates for prediction onto SCD points
