@@ -117,7 +117,7 @@ prop <- "ec_r" ## Dependent variable
 hist(pts.ext.hor$prop)
 summary(pts.ext.hor$prop)
 ## Set transformation and scaling: UPDATE EVERY TIME!!!!!!!!!!!!!!!!
-trans <- "none" # none, log10, log, or sqrt
+trans <- "log" # none, log10, log, or sqrt
 data_type <- "INT2U" # from raster::dataType - INT1U, INT1S, INT2S, INT2U, INT4S, INT4U, FLT4S, FLT8S
 datastretch <- 10
 datastretchlab <- paste(datastretch,"x",sep="")
