@@ -20,10 +20,10 @@ rm(required.packages, new.packages)
 rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 
 ## Key Folder Locations
-predfolder <- "/home/tnaum/data/HYBconus100m/EC_gRPI"
+predfolder <- "/home/tnaum/data/Hyb100m/EC_gRPI"
 repofolder <- "/home/tnaum/data/repos/DSMprops"
-covfolder <- "/home/tnaum/data/SG100_covars"
-ptsfolder <- "/home/tnaum/data/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
+covfolder <- "/media/nped/SG100_covars"
+ptsfolder <- "/media/sped/Hyb100m_gdrv/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
 
 # ## Sourced functions
 # source(paste0(repofolder,"/exec/covar_dev/rfe_rangerFuncs.R"))
@@ -117,7 +117,7 @@ prop <- "ec_r" ## Dependent variable
 hist(pts.ext.hor$prop)
 summary(pts.ext.hor$prop)
 ## Set transformation and scaling: UPDATE EVERY TIME!!!!!!!!!!!!!!!!
-trans <- "log" # none, log10, log, or sqrt
+trans <- "none" # none, log10, log, or sqrt
 data_type <- "INT2U" # from raster::dataType - INT1U, INT1S, INT2S, INT2U, INT4S, INT4U, FLT4S, FLT8S
 datastretch <- 10
 datastretchlab <- paste(datastretch,"x",sep="")
