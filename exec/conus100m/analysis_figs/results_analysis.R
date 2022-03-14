@@ -101,6 +101,6 @@ for(t in depthtypes){
 
 ## Now Save Table
 cv_sum_tab[cv_sum_tab$prop == "Gypsum",]$data <- "geo_gps_gps2_gps3_srce_scd_direct_home" ## Correcting the decision to use this tier for all gypsum models
-write.csv(cv_sum_tab,paste0(resultfolder,"/model_cv10f_summary.csv"))
+write.csv(cv_sum_tab,paste0(resultfolder,"/model_cv10f_summary_",gsub("-","",Sys.Date()),".csv"))
 
 
