@@ -298,6 +298,7 @@ for(d in depths){
   Sys.time()
 
   ## Now pick model mode ranking on gRPI and Rsq
+  data_grid_df <- data_grid_df[data_grid_df$datagrid != "geo_gps_gps2_gps3_srce_scd" & data_grid_df$datagrid != "geo_gps_srce_scd_direct",] ## Updates for EC to eliminate sets <20k pts
   data_grid_df$gRPIfinal <-  (data_grid_df$gRPI.ave + data_grid_df$gRPI.med) / 2
   data_grid_df$gRPI.rank <- rank(data_grid_df$gRPIfinal,ties.method = "random")
   data_grid_df$Rsq.rank <- (nrow(data_grid_df)+1) - rank(data_grid_df$Rsq,ties.method = "average")
