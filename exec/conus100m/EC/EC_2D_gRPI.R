@@ -20,7 +20,7 @@ rm(required.packages, new.packages)
 rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 
 ## Key Folder Locations
-predfolder <- "/home/tnaum/data/Hyb100m/EC_gRPI"
+predfolder <- "/home/tnaum/data/HYBconus100m/EC_gRPI"
 repofolder <- "/home/tnaum/data/repos/DSMprops"
 covfolder <- "/media/nped/SG100_covars"
 ptsfolder <- "/media/sped/Hyb100m_gdrv/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
@@ -298,7 +298,7 @@ for(d in depths){
   Sys.time()
 
   ## Now pick model mode ranking on gRPI and Rsq
-  data_grid_df <- data_grid_df[data_grid_df$datagrid != "geo_gps_gps2_gps3_srce_scd" & data_grid_df$datagrid != "geo_gps_srce_scd_direct",] ## Updates for EC to eliminate sets <20k pts
+  data_grid_df <- data_grid_df[data_grid_df$datagrid != "geo_gps_gps2_gps3_srce_scd" & data_grid_df$datagrid != "geo_gps_srce_scd_direct" & data_grid_df$datagrid != "geo_gps_gps2_srce_scd_direct",] ## Updates for EC to eliminate sets <20k pts
   data_grid_df$gRPIfinal <-  (data_grid_df$gRPI.ave + data_grid_df$gRPI.med) / 2
   data_grid_df$gRPI.rank <- rank(data_grid_df$gRPIfinal,ties.method = "random")
   data_grid_df$Rsq.rank <- (nrow(data_grid_df)+1) - rank(data_grid_df$Rsq,ties.method = "average")
