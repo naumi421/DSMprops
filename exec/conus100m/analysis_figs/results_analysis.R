@@ -70,7 +70,6 @@ stopCluster(cl)
 cv_sum_tab <- plyr::rbind.fill(cvsum_fn.lst)
 
 
-
 ## Now add depth to restriction models
 depthtypes <- c("anylithic","resdept")
 for(t in depthtypes){
