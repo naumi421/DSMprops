@@ -120,7 +120,7 @@ datastretchlab <- paste(datastretch,"x",sep="")
 
 ##### Load and prep SCD data
 ## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
-con <- dbConnect(RSQLite::SQLite(), "/mnt/disks/sped/KSSL-data.sqlite") # once synced switch to: paste0(pedonfldr,"/KSSL-snapshot-draft/KSSL-data.sqlite")
+con <- dbConnect(RSQLite::SQLite(), paste0(pedonfldr,"/KSSL-data.sqlite")) # once synced switch to:
 (ldm_names <- dbListTables(con))
 ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","Bulk_Density_and_Moisture","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
 names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","Bulk_Density_and_Moisture","NCSS_Pedon_Taxonomy")
