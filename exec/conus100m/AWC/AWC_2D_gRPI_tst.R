@@ -59,7 +59,7 @@ cov.proj <- projection(projgrid)
 n.pts <- spTransform(n.pts, CRS(cov.proj)) # project to match rasters
 
 ####### Polygon boundary if needed to clip down
-polybound <- readOGR("/mnt/disks/sped/gisdata/US_Census_500k/cb_2020_us_state_500k", "conus_bound")
+polybound <- readOGR("/mnt/solus100/gis", "conus_bound_500k")
 polybound <- spTransform(polybound, cov.proj)
 n.pts <- n.pts[polybound,]
 
