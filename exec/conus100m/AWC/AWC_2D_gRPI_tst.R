@@ -303,58 +303,25 @@ for(d in depths){
                    min.node.size = trn.params$min.node.size, importance = "permutation")
   vars.imp <- data.frame(import = unname(rf.rfe.init$variable.importance), var = names(rf.rfe.init$variable.importance))
   vars.imp <- vars.imp[order(vars.imp$import),]
-  # num.subsets <- 16 ## Removing feature reduction (8/6/2022)
-  # subset.increm <- floor(nrow(vars.imp)/num.subsets)
-  # subsets <- as.vector(subset.increm)
-  # rfe_tab <- data.frame(var_idx = nrow(vars.imp), rsq = rf.rfe.init$r.squared)
-  # for(s in 1:(num.subsets-2)){subsets <- append(subsets,subsets[length(subsets)]+subset.increm)}
-  # subsets <- subset(subsets, subsets > 20) # Decision to include at least 30 vars so one odd var doesn't dominate and create weird patterns
-  # set.seed(12)
-  # ranger_rfe_fn <- function(ss){
-  #   subsvars <- vars.imp$var[(nrow(vars.imp)-ss):nrow(vars.imp)]
-  #   formulaStringRF_subset <- as.formula(paste('prop_t ~', paste(subsvars, collapse="+")))
-  #   rf.rfe.subs <- ranger(formulaStringRF_subset, data=pts.pcv@data, num.trees = trn.params$ntrees, num.threads = detectCores() - 1,
-  #                         min.node.size = trn.params$min.node.size, importance = "none")
-  #   rfe_tab.sub <- data.frame(var_idx = ss, rsq = rf.rfe.subs$r.squared)
-  #   return(rfe_tab.sub)
-  # }
-  # ## List apply of rfe function
-  # Sys.time()
-  # rfe_tab.subs <- lapply(subsets,try(ranger_rfe_fn))
-  # Sys.time()
-  # rfe_tab.subsdf <- plyr::rbind.fill(rfe_tab.subs)
-  # rfe_tab <- rbind(rfe_tab,rfe_tab.subsdf)
-  # rfe_tab <- rfe_tab[order(rfe_tab$var_idx),]
-  # ## Save rfe results
-  # saveRDS(rfe_tab, paste(predfolder,"/rf.RFE_", prop,"_", d, "_cm",".rds",sep=""))
-  # #plot(rfe_tab$rsq ~ rfe_tab$var_idx) ##
-  # # 4.4 See list of predictors
-  # ## Create idex to grab simpler models close to max Rsq
-  # idx_rfe <- which(rfe_tab$rsq > 0.98*max(rfe_tab$rsq))
-  # idx_rfe <- rfe_tab[min(idx_rfe),]$var_idx
-  # ## Prep for Random Forest
-  # rfe.list <- vars.imp$var[(nrow(vars.imp)-idx_rfe):nrow(vars.imp)] # Select variables from rfe
-  # # varlist_pruned <- names(sort(rf.RFE$fit$importance[,1], decreasing=T)[0:40]) # chose top n variables
-  # formulaStringRF_RFE <- as.formula(paste('prop_t ~ ',paste(rfe.list, collapse="+")))# put in dep variable name
   formulaStringRF_RFE <- formulaStringRF # Testing not having feature reduction
 
   ## TODO!!!!!!!!!!!!!!!! Update formula handling in CV and sCV functions
 
   ######### Match best CV scheme using gRPI.ave
   ## Normal 10-fold cross validation
-  cv10f <- DSMprops::CVranger(x = pts.pcv@data, fm = formulaStringRF_RFE, train.params = trn.params,quants=quants_vec,
+  cv10f <- DSMprops::CVranger(x = pts.pcv@data, fm = formulaStringRF, train.params = trn.params,quants=quants_vec,
                               nfolds = 10, nthreads = 124, os = "linux") # 5min
   ## Spatial 10-fold cross validation on 1km blocks
-  s1cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF_RFE, train.params = trn.params,quants=quants_vec,
+  s1cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,quants=quants_vec,
                                     rast = img10kf, nfolds = 10, nthreads = 124, resol = 1, os = "linux") # 6 min
   ## Spatial 10-fold cross validation on 10km blocks
-  s10cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF_RFE, train.params = trn.params,quants=quants_vec,
+  s10cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,quants=quants_vec,
                                      rast = img10kf, nfolds = 10, nthreads = 124, resol = 10, os = "linux") # 6min
   ## Spatial 10-fold cross validation on 50km blocks
-  s50cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF_RFE, train.params = trn.params,quants=quants_vec,
+  s50cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,quants=quants_vec,
                                      rast = img10kf, nfolds = 10, nthreads = 124, resol = 50, os = "linux") # 6min
   ## Spatial 10-fold cross validation on 100km blocks
-  s100cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF_RFE, train.params = trn.params,quants=quants_vec,
+  s100cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,quants=quants_vec,
                                       rast = img10kf, nfolds = 10, nthreads = 124, resol = 100, os = "linux")
 
   ## Combine CV tables and save in list as R object
@@ -466,7 +433,7 @@ for(d in depths){
   if(varrange == 0) {varrange <- as.numeric(quantile(pts.pcv@data$prop, probs=c(0.9999), na.rm=T)-quantile(pts.pcv@data$prop, probs=c(0.0001),na.rm=T))}
   if(varrange == 0) {varrange <- as.numeric(max(pts.pcv@data$prop, na.rm=T)-min(pts.pcv@data$prop,na.rm=T))}
   ## Train global ranger model
-  rf.qrf <- ranger(formulaStringRF_RFE, data=pts.pcv@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 124,
+  rf.qrf <- ranger(formulaStringRF, data=pts.pcv@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 124,
                    min.node.size = trn.params$min.node.size,
                    importance = "permutation") #case.weights = pts.pcv$tot_wts,
   ## OOB error
