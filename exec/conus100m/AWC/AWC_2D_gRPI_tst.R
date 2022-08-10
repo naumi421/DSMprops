@@ -24,26 +24,20 @@ predfolder <- "/mnt/disks/sped/solus100preds/AWC_gRPI"
 repofolder <- "/mnt/disks/sped/repos/DSMprops"
 covfolder <- "/mnt/disks/sped/covs100m"
 ptsfolder <- "/mnt/solus100/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
-
-# ## Sourced functions
-# source(paste0(repofolder,"/exec/covar_dev/rfe_rangerFuncs.R"))
+pedonfldr <- "/mnt/solus100/2020_Pedons"
 
 ######## Load soil profile collection ##############
 ## Geographic coordinate quality levels
-pts_geocode <- readRDS("/media/sped/Hyb100m_gdrv/2020_Pedons/geocode_weighting.RDS") # From Dave White
-# pts_geocode_wt <- readRDS("/home/tnaum/data/Hyb100m_gdrv/2020_Pedons/geocode_weighting_v2.RDS") # From Dave White
+pts_geocode <- readRDS(paste0(pedonfldr,"/geocode_weighting.RDS")) # From Dave White
 pts_geocode$geo_wt <- pts_geocode$wt
 pts_geocode$wt <- NULL
 pts_geocode$peiid <- as.character(pts_geocode$peiid)
-# ## Pedon quality clases and weights
-# pts_qual_cls <- readRDS("/home/tnaum/data/Hyb100m_gdrv/2020_Pedons/pedonquality_weighting.RDS") # Dave White
-# pts_qual_cls <- pts_qual_cls[!duplicated(pts_qual_cls$peiid),]
 ## Pedons with extracted SSUGO component data
 pts <- readRDS(paste(ptsfolder,"/NASIS_all_component_horizon_match_SPC_ssurgo20.rds",sep=""))
 pts.proj <- proj4string(pts)
 n.pts <- pts@site
 ## Bring in orig nasis points to eliminate those with partial coords
-load("/media/sped/Hyb100m_gdrv/2020_Pedons/nasis_sites_20210325.RData") # object s
+load(paste0(pedonfldr,"/nasis_sites_20210325.RData")) # object s
 s$latnchar <- nchar(abs(s$y_std))
 s$longnchar <- nchar(abs(s$x_std))
 s <- subset(s, s$latnchar > 5 & s$longnchar > 6)
@@ -65,13 +59,15 @@ cov.proj <- projection(projgrid)
 n.pts <- spTransform(n.pts, CRS(cov.proj)) # project to match rasters
 
 ####### Polygon boundary if needed to clip down
-polybound <- readOGR("/media/sped/GIS_data/US_Census_500k/cb_2020_us_state_500k", "conus_bound")
+polybound <- readOGR("/mnt/disks/sped/gisdata/US_Census_500k/cb_2020_us_state_500k", "conus_bound")
 polybound <- spTransform(polybound, cov.proj)
 n.pts <- n.pts[polybound,]
 
 ####### Now create a random sample of points in CONUS to use for gRPI estimation
 # pts.gRPI <- spsample(polybound[1,], 1000000, type = 'random')
 # pts.gRPI <- SpatialPointsDataFrame(pts.gRPI, data.frame(row.names=row.names(pts.gRPI), ID=1:length(pts.gRPI)))
+# saveRDS(pts.gRPI, paste0(ptsfolder,"/CONUS_random_gRPIsamp.rds"))
+pts.gRPI <- readRDS(paste0(ptsfolder,"/CONUS_random_gRPIsamp.rds"))
 
 ## Plot to ensure alignment bw points and rasters
 # plot(projgrid)
@@ -79,22 +75,22 @@ n.pts <- n.pts[polybound,]
 # plot(pts.gRPI, add=TRUE)
 
 ## Parallelized extract for gRPI points
-# rasterOptions(maxmemory = 4e+09)
-# pts.gRPI <- DSMprops::parPTextr(sp = pts.gRPI, gridlist = cov.grids, os = "linux",nthreads = 50)
+# rasterOptions(maxmemory = 1.5e+10)
+# pts.gRPI <- DSMprops::parPTextr(sp = pts.gRPI, gridlist = cov.grids, os = "windows",nthreads = 120)
 # pts.gRPI <- na.omit(pts.gRPI)
 # ## Save points
-# saveRDS(pts.gRPI, paste(ptsfolder,"/CONUS_random_gRPIsamp_spatcovs.rds",sep=""))
+# saveRDS(pts.gRPI, paste(ptsfolder,"/CONUS_random_gRPIsamp_covs.rds",sep=""))
 ## Updated extract for CONUS
-pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp_spatcovs.rds",sep=""))
+pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp_covs.rds",sep=""))
 
 
 ## Parallelized extract for nasis points: (larger datasets)
-# rasterOptions(maxmemory = 4e+09)
-# pts.ext <- DSMprops::parPTextr(sp = n.pts, gridlist = cov.grids, os = "linux",nthreads = 50)
+# rasterOptions(maxmemory = 2e+10)
+# pts.ext <- DSMprops::parPTextr(sp = n.pts, gridlist = cov.grids, os = "windows",nthreads = 124)
 # ## Save points
-# saveRDS(pts.ext, paste(predfolder,"/CONUS_nasis_extracted_spatcovs.rds",sep=""))
+# saveRDS(pts.ext, paste(ptsfolder,"/CONUS_nasis_extracted_covs.rds",sep=""))
 ## Updated extract for CONUS
-pts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_extracted_spatcovs.rds",sep=""))
+pts.ext <- readRDS(paste(ptsfolder,"/CONUS_nasis_extracted_covs.rds",sep=""))
 pts.ext <- left_join(pts.ext, pts_geocode, by = "peiid")
 s$peiid <- as.character(s$peiid)
 pts.ext <- left_join(pts.ext, s[,c("peiid","obsdate","obsdatekind")], by = "peiid")
@@ -124,7 +120,7 @@ datastretchlab <- paste(datastretch,"x",sep="")
 
 ##### Load and prep SCD data
 ## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
-con <- dbConnect(RSQLite::SQLite(), "/media/sped/Hyb100m_gdrv/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
+con <- dbConnect(RSQLite::SQLite(), "/mnt/disks/sped/KSSL-data.sqlite") # once synced switch to: paste0(pedonfldr,"/KSSL-snapshot-draft/KSSL-data.sqlite")
 (ldm_names <- dbListTables(con))
 ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","Bulk_Density_and_Moisture","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
 names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","Bulk_Density_and_Moisture","NCSS_Pedon_Taxonomy")
@@ -155,10 +151,11 @@ scd.pts <- scd.pts[polybound,]
 
 ## Further SCD prep
 ## Extract covariates for prediction onto SCD points
-# scd.pts.ext <- DSMprops::parPTextr(scd.pts, cov.grids, os = "linux", nthreads=50)
+# rasterOptions(maxmemory = 2e+10)
+# scd.pts.ext <- DSMprops::parPTextr(scd.pts, cov.grids, os = "windows", nthreads=124)
 # ## Save scd pts with extraction
-# saveRDS(scd.pts.ext, paste(predfolder,"/SCD","_extracted_spatcovs.rds",sep=""))
-scd.pts.ext <- readRDS(paste(predfolder,"/SCD","_extracted_spatcovs.rds",sep=""))
+# saveRDS(scd.pts.ext, paste(ptsfolder,"/SCD","_extracted_covs.rds",sep=""))
+scd.pts.ext <- readRDS(paste(ptsfolder,"/SCD","_extracted_covs.rds",sep=""))
 ## Create geo-coordinate quality weights
 scd.pts.ext$date <- as.Date(scd.pts.ext$site_obsdate, format = "%m/%d/%Y")
 scd.pts.ext$decdate <- lubridate::decimal_date(scd.pts.ext$date)
@@ -196,15 +193,15 @@ scd.pts.ext.hor <- subset(scd.pts.ext.hor, scd.pts.ext.hor$prop >= 0) # Get rid 
 # ## 10k grid with valus of 1 for all pixels except nodata areas
 # img10kf <- calc(img10k,fun=imgfun,progress="text")
 # ## Save file for future use
-# saveRDS(img10kf,paste(predfolder,"/img10kf.rds",sep=""))
-img10kf <- readRDS(paste(predfolder,"/img10kf.rds",sep=""))
+# saveRDS(img10kf,paste(pedonfldr,"/img10kf.rds",sep=""))
+img10kf <- readRDS(paste(pedonfldr,"/img10kf.rds",sep=""))
 ## Create another grid with unique values for each pixel excepting nodata areas
 ## This is for use in the point density mapping
 img10kfid <- img10kf
 values(img10kfid) <- 1:ncell(img10kfid)
 img10kfid <- overlay(stack(img10kfid,img10kf),fun=function(a,b){a*b})
 ## Bring in feature space weights reference distributions
-ft_wts_ref <- readRDS("/media/sped/Hyb100m_gdrv/2020_Pedons/ref_df.RDS") # From Stephen Roecker, 5/3/2021
+ft_wts_ref <- readRDS(paste0(pedonfldr,"/ref_df.RDS")) # From Stephen Roecker, 5/3/2021
 
 ##### Loop to train and predict properties for all depths
 depths <- c(0,5,15,30,60,100,150)
@@ -271,7 +268,7 @@ for(d in depths){
   ## Call function to estimate gRPI using each data subset as training data
   Sys.time()
   data_grid_df <- DSMprops::gRPI_estim_ranger(x = pts.extcc@data, gsamp = pts.gRPI, fm = formulaStringRF, griddf = grid_vec, os="linux",
-                                               train.params = trn.params, nthreads = 62)
+                                               train.params = trn.params, nthreads = 124)
   Sys.time()
 
   ## Now pick model mode ranking on gRPI and Rsq
@@ -286,7 +283,7 @@ for(d in depths){
   write.table(data_grid_df, paste(predfolder,"/gRPIs_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
   data_grid_df <- read.delim(paste(predfolder,"/gRPIs_", prop,"_", d, "_cm.txt",sep=""),stringsAsFactors = F)
   ## Select points from overall dataset based on combined rankings
-  if(d == 30 | d == 60){ ## Special case to deal with poor Rsq chosen in 30 and 60cm models
+  if(d == 30 | d == 60 | d == 15){ ## Special case to deal with poor Rsq chosen in 30 and 60cm models
     data_grid_df[data_grid_df$datagrid == "geo_gps_gps2_gps3_srce_scd_direct_home",]$rank_final <- 0
   }
   model_params <- str_split(data_grid_df[data_grid_df$rank_final==min(data_grid_df$rank_final),c("datagrid")][1],"_")[[1]]
@@ -302,62 +299,63 @@ for(d in depths){
 
   ########### Recursive feature elimination
   #The simulation will fit models a set number of covariate subsets based on an initial full model variable importance
-  rf.rfe.init <- ranger(formulaStringRF, data=pts.pcv@data, num.trees = trn.params$ntrees, num.threads = 60,
+  rf.rfe.init <- ranger(formulaStringRF, data=pts.pcv@data, num.trees = trn.params$ntrees, num.threads = 124,
                    min.node.size = trn.params$min.node.size, importance = "permutation")
   vars.imp <- data.frame(import = unname(rf.rfe.init$variable.importance), var = names(rf.rfe.init$variable.importance))
   vars.imp <- vars.imp[order(vars.imp$import),]
-  num.subsets <- 16
-  subset.increm <- floor(nrow(vars.imp)/num.subsets)
-  subsets <- as.vector(subset.increm)
-  rfe_tab <- data.frame(var_idx = nrow(vars.imp), rsq = rf.rfe.init$r.squared)
-  for(s in 1:(num.subsets-2)){subsets <- append(subsets,subsets[length(subsets)]+subset.increm)}
-  subsets <- subset(subsets, subsets > 20) # Decision to include at least 30 vars so one odd var doesn't dominate and create weird patterns
-  set.seed(12)
-  ranger_rfe_fn <- function(ss){
-    subsvars <- vars.imp$var[(nrow(vars.imp)-ss):nrow(vars.imp)]
-    formulaStringRF_subset <- as.formula(paste('prop_t ~', paste(subsvars, collapse="+")))
-    rf.rfe.subs <- ranger(formulaStringRF_subset, data=pts.pcv@data, num.trees = trn.params$ntrees, num.threads = detectCores() - 1,
-                          min.node.size = trn.params$min.node.size, importance = "none")
-    rfe_tab.sub <- data.frame(var_idx = ss, rsq = rf.rfe.subs$r.squared)
-    return(rfe_tab.sub)
-  }
-  ## List apply of rfe function
-  Sys.time()
-  rfe_tab.subs <- lapply(subsets,try(ranger_rfe_fn))
-  Sys.time()
-  rfe_tab.subsdf <- plyr::rbind.fill(rfe_tab.subs)
-  rfe_tab <- rbind(rfe_tab,rfe_tab.subsdf)
-  rfe_tab <- rfe_tab[order(rfe_tab$var_idx),]
-  ## Save rfe results
-  saveRDS(rfe_tab, paste(predfolder,"/rf.RFE_", prop,"_", d, "_cm",".rds",sep=""))
-  #plot(rfe_tab$rsq ~ rfe_tab$var_idx) ##
-  # 4.4 See list of predictors
-  ## Create idex to grab simpler models close to max Rsq
-  idx_rfe <- which(rfe_tab$rsq > 0.98*max(rfe_tab$rsq))
-  idx_rfe <- rfe_tab[min(idx_rfe),]$var_idx
-  ## Prep for Random Forest
-  rfe.list <- vars.imp$var[(nrow(vars.imp)-idx_rfe):nrow(vars.imp)] # Select variables from rfe
-  # varlist_pruned <- names(sort(rf.RFE$fit$importance[,1], decreasing=T)[0:40]) # chose top n variables
-  formulaStringRF_RFE <- as.formula(paste('prop_t ~ ',paste(rfe.list, collapse="+")))# put in dep variable name
+  # num.subsets <- 16 ## Removing feature reduction (8/6/2022)
+  # subset.increm <- floor(nrow(vars.imp)/num.subsets)
+  # subsets <- as.vector(subset.increm)
+  # rfe_tab <- data.frame(var_idx = nrow(vars.imp), rsq = rf.rfe.init$r.squared)
+  # for(s in 1:(num.subsets-2)){subsets <- append(subsets,subsets[length(subsets)]+subset.increm)}
+  # subsets <- subset(subsets, subsets > 20) # Decision to include at least 30 vars so one odd var doesn't dominate and create weird patterns
+  # set.seed(12)
+  # ranger_rfe_fn <- function(ss){
+  #   subsvars <- vars.imp$var[(nrow(vars.imp)-ss):nrow(vars.imp)]
+  #   formulaStringRF_subset <- as.formula(paste('prop_t ~', paste(subsvars, collapse="+")))
+  #   rf.rfe.subs <- ranger(formulaStringRF_subset, data=pts.pcv@data, num.trees = trn.params$ntrees, num.threads = detectCores() - 1,
+  #                         min.node.size = trn.params$min.node.size, importance = "none")
+  #   rfe_tab.sub <- data.frame(var_idx = ss, rsq = rf.rfe.subs$r.squared)
+  #   return(rfe_tab.sub)
+  # }
+  # ## List apply of rfe function
+  # Sys.time()
+  # rfe_tab.subs <- lapply(subsets,try(ranger_rfe_fn))
+  # Sys.time()
+  # rfe_tab.subsdf <- plyr::rbind.fill(rfe_tab.subs)
+  # rfe_tab <- rbind(rfe_tab,rfe_tab.subsdf)
+  # rfe_tab <- rfe_tab[order(rfe_tab$var_idx),]
+  # ## Save rfe results
+  # saveRDS(rfe_tab, paste(predfolder,"/rf.RFE_", prop,"_", d, "_cm",".rds",sep=""))
+  # #plot(rfe_tab$rsq ~ rfe_tab$var_idx) ##
+  # # 4.4 See list of predictors
+  # ## Create idex to grab simpler models close to max Rsq
+  # idx_rfe <- which(rfe_tab$rsq > 0.98*max(rfe_tab$rsq))
+  # idx_rfe <- rfe_tab[min(idx_rfe),]$var_idx
+  # ## Prep for Random Forest
+  # rfe.list <- vars.imp$var[(nrow(vars.imp)-idx_rfe):nrow(vars.imp)] # Select variables from rfe
+  # # varlist_pruned <- names(sort(rf.RFE$fit$importance[,1], decreasing=T)[0:40]) # chose top n variables
+  # formulaStringRF_RFE <- as.formula(paste('prop_t ~ ',paste(rfe.list, collapse="+")))# put in dep variable name
+  formulaStringRF_RFE <- formulaStringRF # Testing not having feature reduction
 
   ## TODO!!!!!!!!!!!!!!!! Update formula handling in CV and sCV functions
 
   ######### Match best CV scheme using gRPI.ave
   ## Normal 10-fold cross validation
   cv10f <- DSMprops::CVranger(x = pts.pcv@data, fm = formulaStringRF_RFE, train.params = trn.params,quants=quants_vec,
-                              nfolds = 10, nthreads = 60, os = "linux") # 5min
+                              nfolds = 10, nthreads = 124, os = "linux") # 5min
   ## Spatial 10-fold cross validation on 1km blocks
   s1cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF_RFE, train.params = trn.params,quants=quants_vec,
-                                    rast = img10kf, nfolds = 10, nthreads = 60, resol = 1, os = "linux") # 6 min
+                                    rast = img10kf, nfolds = 10, nthreads = 124, resol = 1, os = "linux") # 6 min
   ## Spatial 10-fold cross validation on 10km blocks
   s10cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF_RFE, train.params = trn.params,quants=quants_vec,
-                                     rast = img10kf, nfolds = 10, nthreads = 60, resol = 10, os = "linux") # 6min
+                                     rast = img10kf, nfolds = 10, nthreads = 124, resol = 10, os = "linux") # 6min
   ## Spatial 10-fold cross validation on 50km blocks
   s50cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF_RFE, train.params = trn.params,quants=quants_vec,
-                                     rast = img10kf, nfolds = 10, nthreads = 60, resol = 50, os = "linux") # 6min
+                                     rast = img10kf, nfolds = 10, nthreads = 124, resol = 50, os = "linux") # 6min
   ## Spatial 10-fold cross validation on 100km blocks
   s100cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF_RFE, train.params = trn.params,quants=quants_vec,
-                                      rast = img10kf, nfolds = 10, nthreads = 60, resol = 100, os = "linux")
+                                      rast = img10kf, nfolds = 10, nthreads = 124, resol = 100, os = "linux")
 
   ## Combine CV tables and save in list as R object
   cv.lst <- list(cv10f,s1cv10f,s10cv10f,s50cv10f, s100cv10f)
@@ -468,7 +466,7 @@ for(d in depths){
   if(varrange == 0) {varrange <- as.numeric(quantile(pts.pcv@data$prop, probs=c(0.9999), na.rm=T)-quantile(pts.pcv@data$prop, probs=c(0.0001),na.rm=T))}
   if(varrange == 0) {varrange <- as.numeric(max(pts.pcv@data$prop, na.rm=T)-min(pts.pcv@data$prop,na.rm=T))}
   ## Train global ranger model
-  rf.qrf <- ranger(formulaStringRF_RFE, data=pts.pcv@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 60,
+  rf.qrf <- ranger(formulaStringRF_RFE, data=pts.pcv@data, num.trees = trn.params$ntrees, quantreg = T, num.threads = 124,
                    min.node.size = trn.params$min.node.size,
                    importance = "permutation") #case.weights = pts.pcv$tot_wts,
   ## OOB error
@@ -477,7 +475,7 @@ for(d in depths){
   # imp <- data.frame(var=names(importance(rf.qrf)),imp_meas = unname(importance(rf.qrf)))
   # imp[order(imp$imp_meas, decreasing = T),][1:30,]
   ## Linear Adjustment for bias in low and high predictions
-  pts.pcv@data$trainpreds <- predict(rf.qrf, data=pts.pcv@data, num.threads = 60)$predictions
+  pts.pcv@data$trainpreds <- predict(rf.qrf, data=pts.pcv@data, num.threads = 124)$predictions
   attach(pts.pcv@data)
   rf_lm_adj <- lm(prop_t ~ trainpreds)
   detach(pts.pcv@data)
@@ -505,8 +503,8 @@ for(d in depths){
 
   ## Predict onto covariate grid
   ## Parallelized predict
-  rasterOptions(maxmemory = 7e+09,chunksize = 1e+09)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
-  beginCluster(62,type='SOCK')
+  rasterOptions(maxmemory = 6e+09,chunksize = 8e+08)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
+  beginCluster(124,type='SOCK')
   Sys.time()
   predl <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.025)),progress="text")
   Sys.time()
