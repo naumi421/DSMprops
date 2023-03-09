@@ -12,11 +12,11 @@ rm(required.packages, new.packages)
 rasterOptions(maxmemory = 2e+09, chunksize = 2e+08)
 
 ## Key folders
-resultfolder <- "/home/tnaum/data/Hyb100m/RestrDepth"
-ptsfolder <- "/media/sped/Hyb100m_gdrv/2020_Pedons"
+resultfolder <- "/mnt/covs/solus_preds/v2tst_gnat_pts/RestrDepth_gRPI_250k"
+ptsfolder <- "/mnt/solus100/2020_Pedons"
 ssurgo_fgdb <- "/media/nped/gSSURGO20/gSSURGO_CONUS.gdb"
 ssurgofolder <- "/media/nped/gSSURGO20"
-nasisextfldr <- "/media/sped/Hyb100m_gdrv/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
+nasisextfldr <- "/mnt/solus100/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
 
 
 ### Explore gSSURGO GDB and open necessary files
@@ -121,7 +121,7 @@ saveRDS(nasispts_anylithic,paste0(resultfolder,"/nasis_anylithic.rds"))
 ######## SCD
 ## load scd pts and horizon data to determin restriction depth
 ## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
-con <- dbConnect(RSQLite::SQLite(), "/media/sped/Hyb100m_gdrv/2020_Pedons/KSSL-snapshot-draft/KSSL-data.sqlite")
+con <- dbConnect(RSQLite::SQLite(), paste0(ptsfolder,"/KSSL-data.sqlite"))
 (ldm_names <- dbListTables(con))
 ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
 names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","NCSS_Pedon_Taxonomy")
@@ -138,6 +138,8 @@ table(r$hzn_desgn)
 r1 <- r[!(r$hzn_desgn == 'Bt/E(Btpart' | r$hzn_desgn== 'Bt/E(Epart' | r$hzn_desgn== 'Bt/Cr1' | r$hzn_desgn== '2Cdkng' | r$hzn_desgn== 'Cr/Bt') | r$hzn_desgn == 'Bt/Cr2',]
 # Only the first row of each pedon (i.e., the upper boundary of the first horizon indicating a root restricting layer)
 r2 <- r1[!duplicated(r1$site_key),]
+summary(r2$Depth)
+hist(r2$Depth,breaks = c(0,50,100,150,200,300,400,500,1768),freq=T)
 # Assign depth
 r2$Depth = r2$hzn_top
 # Now remove all pedons with root restricting layers from the whole dataset
@@ -148,16 +150,21 @@ names(h3)[2] <- 'Depth'
 # check that there is only one depth value for each pedon h3[duplicated(h3$pedon_key),] # no dups 2/28/22
 # Remove the pedons for which I couldn't determine a depth class, then set the remaining depth values to 201 (which is essentially a flag indicating 201+ cm and should be useful for survival analysis) because these depths (even if > 201 cm) only record the lower depth to which the pedon was excavated and are not physically meaningful.
 h4 <- h3[complete.cases(h3),]
-h4$Depth <- 201 ## These are pedons which had no restriction flag, so set to right censored 201 max depth
+## These are pedons which had no restriction flag
+summary(h4$Depth)
+hist(h4$Depth,breaks = c(0,50,100,150,200,300,400,500,2590),freq=T)
+# However, many have max depths much less than 201, so not appropriate to call all very deep
+h4 <-  h4[h4$Depth > 100,] # Include all that are at least deep due to concerns that some are partially sampled pedons
 # Join both datasets
 rrl <- rbind(r2[,c("site_key","Depth")], h4)
 summary(rrl$Depth)
 rrl$resdept_r <- ifelse(rrl$Depth > 201, 201, rrl$Depth) ##
-saveRDS(rrl[,c("site_key","resdept_r")], paste0(resultfolder,"/scd_restrs.rds"))
+summary(rrl$resdept_r)
+saveRDS(rrl[,c("site_key","resdept_r")], paste0(resultfolder,"/scd_restrs_v2.rds"))
 
 ## Depth to lithic contact
 ### Depth to restricting layer
-# All those with some form of root restricting layer. Once does have to be a bit careful with this because this does catch old horizon designations of ir which is 's' in todays taxonomy, and it catches horizons labeled with 'and' in the word.
+# All those with some form of lithic layer. Once does have to be a bit careful with this because this does catch old horizon designations of ir which is 's' in todays taxonomy, and it catches horizons labeled with 'and' in the word.
 r <- h[grep('[r]', h$hzn_desgn, ignore.case=TRUE),]
 # Remove a few odd horizon designations that dont make sense or aren't root restricting
 table(r$hzn_desgn)
@@ -166,17 +173,21 @@ r1 <- r[!(r$hzn_desgn == 'Bt/E(Btpart' | r$hzn_desgn== 'Bt/E(Epart' | r$hzn_desg
 r2 <- r1[!duplicated(r1$site_key),]
 # Assign depth
 r2$Depth = r2$hzn_top
-# Now remove all pedons with root restricting layers from the whole dataset
+# Now remove all pedons with lithic layers from the whole dataset
 h2 <- subset(h, !(h$site_key %in% r2$site_key))
-# Get the max recorded depth of pedons without a recorded root restricting layer
+# Get the max recorded depth of pedons without a recorded lithic layer
 h3 <- ddply(h2, "site_key", function(x) max(x$hzn_bot))
 names(h3)[2] <- 'Depth'
 # check that there is only one depth value for each pedon h3[duplicated(h3$pedon_key),] # no dups 2/28/22
-# Remove the pedons for which I couldn't determine a depth class, then set the remaining depth values to 201 (which is essentially a flag indicating 201+ cm and should be useful for survival analysis) because these depths (even if > 201 cm) only record the lower depth to which the pedon was excavated and are not physically meaningful.
+# Remove the pedons for which I couldn't determine a depth class, then set the remaining depth values to 201
+# (which is essentially a flag indicating 201+ cm and should be useful for survival analysis) because these depths (even if > 201 cm) only record the lower depth to which the pedon was excavated and are not physically meaningful.
 h4 <- h3[complete.cases(h3),]
-h4$Depth <- 201 ## These are pedons which had no restriction flag, so set to right censored 201 max depth
+summary(h4$Depth)
+hist(h4$Depth,breaks = c(0,50,100,150,200,300,400,500,2590),freq=T)
+h4 <-  h4[h4$Depth > 100,]
 # Join both datasets
 rrl <- rbind(r2[,c("site_key","Depth")], h4)
 summary(rrl$Depth)
 rrl$Depth <- ifelse(rrl$Depth > 201, 201, rrl$Depth) ##
-saveRDS(rrl[,c("site_key","Depth")], paste0(resultfolder,"/scd_anylithic.rds"))
+summary(rrl$Depth)
+saveRDS(rrl[,c("site_key","Depth")], paste0(resultfolder,"/scd_anylithic_v2.rds"))

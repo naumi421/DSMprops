@@ -5,7 +5,7 @@
 ## T Nauman, 11/16/2022
 
 ### Packages
-required.packages <- c("raster", "sp", "rgdal","doParallel", "plyr", "dplyr","sf","cluster","RSQLite","lubridate","rasterVis","maptools","classInt")
+required.packages <- c("raster", "sp", "rgdal","doParallel", "plyr", "dplyr","sf","cluster","RSQLite","lubridate","rasterVis","maptools","classInt","mapview")
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
@@ -14,11 +14,11 @@ rm(required.packages, new.packages)
 rasterOptions(maxmemory = 2e+09, chunksize = 2e+08)
 
 ### Key folders
-projfldr <- "/mnt/solus100/Predictionsv2/Predictionsv2tst/AWC_gRPI/compare"
+projfldr <- "/mnt/solus100/Predictionsv2/Predictionsv2tst/Sand_gRPI/compare"
 gnatsgofldr <- "/mnt/covs/gNATSGO_CONUS_tif"
-predfldr <- "/mnt/solus100/Predictionsv2/Predictionsv2tst/AWC_gRPI"
+predfldr <- "/mnt/solus100/Predictionsv2/Predictionsv2tst/Sand_gRPI"
 gnatsgotabfldr <- "/mnt/covs/gNATSGO_CONUS_tif/gNATSGO_Tabular_CSV"
-
+sg100fldr <- "/mnt/covs/sg100"
 
 ### gNATSGO tif
 sstif <- raster(paste0(gnatsgofldr,"/gNATSGO-mukey.tif"))
@@ -30,8 +30,10 @@ ss.crs <- raster::crs(sstif) ## Maintains both proj4 and proj6 properties
 ### Area of Interest
 areaname <- "chico"
 ## Using bbox
-# aoi_ext <- extent(xmin,xmax,ymin,ymax) ## enter xmin,xmax,ymin,ymax in coordinate system
-# proj4string(aoi_ext) <- sp::CRS("EPSG:4326") # PROJ6 compatible
+# aoi_poly <- as(extent(-110.109970,-109.218065,38.521695,39.050980),"SpatialPolygons") ## enter xmin,xmax,ymin,ymax in coordinate system
+# proj4string(aoi_poly) <- sp::CRS("EPSG:4326") # PROJ6 compatible
+# polybound_p <- spTransform(aoi_poly, ss.crs)
+# aoi_ext <- extent(polybound_p)
 ## Using sp object
 layernm <- "chico_solus_poly"
 polybound <- readOGR(projfldr, layernm)
@@ -41,6 +43,10 @@ aoi_ext <- extent(polybound_p)
 #### Clip raster down and get unique mukeys
 sstif_clp <- crop(sstif, aoi_ext)
 mukeys <- raster::unique(sstif_clp)
+
+## Check extent in mapview
+mapview(polybound_p)
+mapview(sstif_clp)
 
 ##### Also load necessary data tables and subset to study area
 comp.df <- read.csv(paste0(gnatsgotabfldr,"/component.csv"))
@@ -67,12 +73,12 @@ horiz_comps$cokey <- as.character(horiz_comps$cokey)
 horiz_comps[] <- lapply(horiz_comps, function(x) if (is.factor(x)) as.character(x) else {x})
 
 ## Set gNATSGO property
-prop <- 'awc_r'
+prop <- 'sandtotal_r'
 ## Vector of depths to render
 depths <- c(0,5,15,30,60,100,150)
 ## Scaling and datatype
 data_type <- "INT1U"
-datastretch <- 100
+datastretch <- 1
 datastretchlab <- paste(datastretch,"x",sep="")
 
 ## Set up depth loop for gNATSGO rasters
@@ -122,7 +128,7 @@ for(d in depths){
 }
 
 ### Bring in other raster predictions for comparison
-lithic <- crop(raster("/mnt/solus100/Predictions/RestrDepth_gRPI/anylithicdpt_1x_all_cm_2D_QRF.tif"),aoi_ext) ## Depth to bedrock raster to clip
+lithic <- crop(raster("/mnt/solus100/Predictions/RestrDepth_gRPI/adjusted_preds/anylithicdpt_1x_all_cm_2D_QRFadj.tif"),aoi_ext) ## Depth to bedrock raster to clip
 rast.files <- list.files(path = predfldr,pattern="QRFadj.tif$",full.names = T, recursive = F)
 pred1 <- crop(raster(rast.files[grep(paste0('_',depths[1],'_cm'),rast.files)]),aoi_ext)
 pred2 <- crop(raster(rast.files[grep(paste0('_',depths[2],'_cm'),rast.files)]),aoi_ext)
@@ -133,13 +139,14 @@ pred6 <- crop(raster(rast.files[grep(paste0('_',depths[6],'_cm'),rast.files)]),a
 pred7 <- crop(raster(rast.files[grep(paste0('_',depths[7],'_cm'),rast.files)]),aoi_ext)
 
 ### Use mask function to assign pixels below bedrock depth to NA
-pred1d <- overlay(lithic,pred1, fun=function(l,r) {return(ifelse(l>depths[1],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[1],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE)
-pred2d <- overlay(lithic,pred2, fun=function(l,r) {return(ifelse(l>depths[2],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[2],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE)
-pred3d <- overlay(lithic,pred3, fun=function(l,r) {return(ifelse(l>depths[3],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[3],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE)
-pred4d <- overlay(lithic,pred4, fun=function(l,r) {return(ifelse(l>depths[4],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[4],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE)
-pred5d <- overlay(lithic,pred5, fun=function(l,r) {return(ifelse(l>depths[5],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[5],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE)
-pred6d <- overlay(lithic,pred6, fun=function(l,r) {return(ifelse(l>depths[6],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[6],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE)
-pred7d <- overlay(lithic,pred7, fun=function(l,r) {return(ifelse(l>depths[7],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[7],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE)
+pred1d <- overlay(lithic,pred1, fun=function(l,r) {return(ifelse(l>depths[1],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[1],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE,forcefun=T)
+pred2d <- overlay(lithic,pred2, fun=function(l,r) {return(ifelse(l>depths[2],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[2],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE,forcefun=T)
+pred3d <- overlay(lithic,pred3, fun=function(l,r) {return(ifelse(l>depths[3],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[3],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE,forcefun=T)
+pred4d <- overlay(lithic,pred4, fun=function(l,r) {return(ifelse(l>depths[4],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[4],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE,forcefun=T)
+pred5d <- overlay(lithic,pred5, fun=function(l,r) {return(ifelse(l>depths[5],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[5],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE,forcefun=T)
+pred6d <- overlay(lithic,pred6, fun=function(l,r) {return(ifelse(l>depths[6],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[6],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE,forcefun=T)
+pred7d <- overlay(lithic,pred7, fun=function(l,r) {return(ifelse(l>depths[7],r,NA))},progress='text',filename = paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[7],"_cm_SOLUS_",areaname,".tif"),datatype=data_type, overwrite=TRUE,forcefun=T)
+
 
 ### Bring in preped gNATSGO layers to plot
 ss1 <- raster(paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[1],"_cm_gNATSGO_",areaname,".tif"))
@@ -150,19 +157,36 @@ ss5 <- raster(paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[5],"_cm_gNA
 ss6 <- raster(paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[6],"_cm_gNATSGO_",areaname,".tif"))
 ss7 <- raster(paste0(projfldr,"/",prop,"_",datastretchlab,"_",depths[7],"_cm_gNATSGO_",areaname,".tif"))
 
+### Bring in SoilGrids 100m layers to plot
+rast.files <- list.files(path = sg100fldr,pattern=".tif$",full.names = T, recursive = F)
+rast.files <- rast.files[grep("sand",rast.files)]
+sg1 <- crop(raster(rast.files[grep('sl1',rast.files)]),aoi_ext)
+sg2 <- crop(raster(rast.files[grep('sl2',rast.files)]),aoi_ext)
+sg3 <- crop(raster(rast.files[grep('sl3',rast.files)]),aoi_ext)
+sg4 <- crop(raster(rast.files[grep('sl4',rast.files)]),aoi_ext)
+sg5 <- crop(raster(rast.files[grep('sl5',rast.files)]),aoi_ext)
+sg6 <- crop(raster(rast.files[grep('sl6',rast.files)]),aoi_ext)
+sg7 <- crop(raster(rast.files[grep('sl7',rast.files)]),aoi_ext)
+
+
 ### Now create trellis graph to compare the datasets
+## SOLUS
 model_maps<-stack(pred1d,pred2d,pred3d,pred4d,pred5d,pred6d,pred7d)
 names(model_maps)<-list( paste0('Modeled ',prop,' ',depths[1],' cm'), paste0('Modeled ',prop,' ',depths[2],' cm'), paste0('Modeled ',prop,' ',depths[3],' cm'), paste0('Modeled ',prop,' ',depths[4],' cm'),
-                   paste0('Modeled ',prop,' ',depths[5],' cm'),  paste0('Modeled ',prop,' ',depths[6],' cm'), paste0('Modeled ',prop,' ',depths[7],' cm'))
-
+                         paste0('Modeled ',prop,' ',depths[5],' cm'),  paste0('Modeled ',prop,' ',depths[6],' cm'), paste0('Modeled ',prop,' ',depths[7],' cm'))
+## gNATSGO
 ss_maps<-stack(ss1,ss2,ss3,ss4,ss5,ss6,ss7)
 names(ss_maps)<-list( paste0('gNATSGO ',prop,' ',depths[1],' cm'), paste0('gNATSGO ',prop,' ',depths[2],' cm'),paste0('gNATSGO ',prop,' ',depths[3],' cm'), paste0('gNATSGO ',prop,' ',depths[4],' cm'),
-                         paste0('gNATSGO ',prop,' ',depths[5],' cm'), paste0('gNATSGO ',prop,' ',depths[6],' cm'), paste0('gNATSGO ',prop,' ',depths[7],' cm'))
+                      paste0('gNATSGO ',prop,' ',depths[5],' cm'), paste0('gNATSGO ',prop,' ',depths[6],' cm'), paste0('gNATSGO ',prop,' ',depths[7],' cm'))
 
+## SoilGrids 100m CONUS
+sg_maps <- stack(sg1,sg2,sg3,sg4,sg5,sg6,sg7)
+names(sg_maps)<-list( paste0('SG100 ',prop,' ',depths[1],' cm'), paste0('SG100 ',prop,' ',depths[2],' cm'),paste0('SG100 ',prop,' ',depths[3],' cm'), paste0('SG100 ',prop,' ',depths[4],' cm'),
+                      paste0('SG100 ',prop,' ',depths[5],' cm'), paste0('SG100 ',prop,' ',depths[6],' cm'), paste0('SG100 ',prop,' ',depths[7],' cm'))
 
 ## Ramp and Label parameters
-my.at<-c(0,5,10,15,20,25,30,35) # color ramp breaks used for labels (will be excluded if colorkey truncates)
-my.atc <- c(0,5,10,15,20,25,30,35) # color ramp break label positions
+my.at<-c(0,10,20,35,50,70,90) # color ramp breaks used for labels (will be excluded if colorkey truncates)
+my.atc <- c(0,10,20,35,50,70,90) # color ramp break label positions
 my.colorkey<-list(at=my.atc,
                   labels=list(
                     at=my.at
@@ -181,3 +205,8 @@ p <- levelplot(ss_maps, par.settings=viridisTheme,  scales=list(draw=F),colorkey
 p
 dev.off()
 
+## sg100 plot
+tiff(paste0(projfldr,"/",prop,"_SG100_",areaname,".tif"),width = 3.5, height = 14, units = 'in', res = 600 ) # begins rendering high res figure
+p <- levelplot(sg_maps, par.settings=viridisTheme,  scales=list(draw=F),colorkey=my.colorkey,at=my.at, main="",layout=c(1,7) ) #margin=list(FUN='median'),
+p
+dev.off()
