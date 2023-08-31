@@ -18,13 +18,16 @@ rm(required.packages, new.packages)
 ## Increase actuve memory useable by raster package: Windows only
 #memory.limit(500000)
 rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
+cpus <- min(detectCores()-2, 124)
 
 ## Key Folder Locations
-predfolder <- "/mnt/disks/sped/solus100preds/AWC_gRPI"
+predfolder <- "/mnt/disks/sped/solus100preds/v2tst_gnat_pts/Rock_tot_gRPI_250k"
 repofolder <- "/mnt/disks/sped/repos/DSMprops"
 covfolder <- "/mnt/disks/sped/covs100m"
+propcovfldr <- "/mnt/disks/sped/covs100m_by_prop"
 ptsfolder <- "/mnt/solus100/NASIS_SSURGO_Extracts/NASIS20_SSURGO20_ext_final"
 pedonfldr <- "/mnt/solus100/2020_Pedons"
+ssurgo_fgdb <- "/home/tnaum/data/gSSURGO20/gSSURGO_CONUS.gdb"
 
 ######## Load soil profile collection ##############
 ## Geographic coordinate quality levels
@@ -49,10 +52,24 @@ projection(n.pts) <- pts.proj
 n.pts@data <- n.pts@data[,c("peiid","mtchtype","compname")]
 
 
+### Define SSURGO property for modeling and covariate layer selection
+prop <- "fragvol_r" ## Dependent variable: UPDATE EVERY TIME
+
+
 ######### Grid Prep #################
 ## Make list of grids
 cov.grids <- list.files(path = covfolder,pattern=".tif$",full.names = T, recursive = F)
 cov.grids.names <- basename(cov.grids)
+
+## Grab gNATSGO property maps to use in creating point sample
+prop.cov.grids <- list.files(path = paste0(propcovfldr,"/",prop),pattern=prop,full.names = T, recursive = F)
+prop.cov.grids <- prop.cov.grids[grepl(".tif",prop.cov.grids)]
+prop.cov.grids <- prop.cov.grids[!grepl("_NAs_",prop.cov.grids)]
+prop.cov.grids.names <- basename(prop.cov.grids)
+
+## Extraction list for gNATSGO training points
+gNATpts_cov.grids <- append(cov.grids,prop.cov.grids)
+
 ## If points need to be matched up to grids ###
 projgrid <- raster(paste(covfolder,"/T07PRI5.tif",sep="")) # This raster is fully clipped
 cov.proj <- projection(projgrid)
@@ -67,7 +84,7 @@ n.pts <- n.pts[polybound,]
 # pts.gRPI <- spsample(polybound[1,], 1000000, type = 'random')
 # pts.gRPI <- SpatialPointsDataFrame(pts.gRPI, data.frame(row.names=row.names(pts.gRPI), ID=1:length(pts.gRPI)))
 # saveRDS(pts.gRPI, paste0(ptsfolder,"/CONUS_random_gRPIsamp.rds"))
-pts.gRPI <- readRDS(paste0(ptsfolder,"/CONUS_random_gRPIsamp.rds"))
+# pts.gRPI <- readRDS(paste0(ptsfolder,"/CONUS_random_gRPIsamp.rds"))
 
 ## Plot to ensure alignment bw points and rasters
 # plot(projgrid)
@@ -76,17 +93,27 @@ pts.gRPI <- readRDS(paste0(ptsfolder,"/CONUS_random_gRPIsamp.rds"))
 
 ## Parallelized extract for gRPI points
 # rasterOptions(maxmemory = 1.5e+10)
-# pts.gRPI <- DSMprops::parPTextr(sp = pts.gRPI, gridlist = cov.grids, os = "windows",nthreads = 120)
+# pts.gRPI <- DSMprops::parPTextr(sp = pts.gRPI, gridlist = cov.grids, os = "windows",nthreads = cpus)
 # pts.gRPI <- na.omit(pts.gRPI)
 # ## Save points
 # saveRDS(pts.gRPI, paste(ptsfolder,"/CONUS_random_gRPIsamp_covs.rds",sep=""))
 ## Updated extract for CONUS
 pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp_covs.rds",sep=""))
 
+## Set up gNATSGO property estimate training points
+# pts.gNAT <- spsample(polybound[1,], 250000, type = 'random')
+# pts.gNAT <- SpatialPointsDataFrame(pts.gNAT, data.frame(row.names=row.names(pts.gNAT), ID=1:length(pts.gNAT)))
+# saveRDS(pts.gNAT, paste0(ptsfolder,"/CONUS_random_gNATsamp_250k.rds"))
+pts.gNAT <- readRDS(paste0(ptsfolder,"/CONUS_random_gNATsamp_250k.rds"))
+rasterOptions(maxmemory = 1.5e+10)
+pts.gNAT <- DSMprops::parPTextr(sp = pts.gNAT, gridlist = gNATpts_cov.grids, os = "windows",nthreads = cpus)
+## Save points
+saveRDS(pts.gNAT, paste(ptsfolder,"/CONUS_random_gNATsamp_250k_covs_",prop,"_",".rds",sep=""))
+# pts.gNAT <- readRDS(paste(ptsfolder,"/CONUS_random_gNATsamp_250k_covs_",prop,"_",".rds",sep=""))
 
 ## Parallelized extract for nasis points: (larger datasets)
 # rasterOptions(maxmemory = 2e+10)
-# pts.ext <- DSMprops::parPTextr(sp = n.pts, gridlist = cov.grids, os = "windows",nthreads = 124)
+# pts.ext <- DSMprops::parPTextr(sp = n.pts, gridlist = cov.grids, os = "windows",nthreads = cpus)
 # ## Save points
 # saveRDS(pts.ext, paste(ptsfolder,"/CONUS_nasis_extracted_covs.rds",sep=""))
 ## Updated extract for CONUS
@@ -107,77 +134,86 @@ pts.ext$tid <- "nasis"
 ## Join extracted pts to horizon data
 pts.ext.hor <- left_join(pts@horizons[pts@horizons$peiid %in% pts.ext$peiid,],pts.ext, by="peiid")
 
+#### Rock fragment prep for SSURGO extracted NASIS pts
+## Read in gdb with rgdal to get sp object
+# chfrags <- sf::st_read(dsn = ssurgo_fgdb, layer = "chfrags")
+# chfrags[] <- lapply(chfrags, function(x) if (is.factor(x)) as.character(x) else {x})
+# chkeys <- unique(pts.ext.hor$chkey)
+# chfrags <- chfrags[chfrags$chkey %in% chkeys,]
+# saveRDS(chfrags,paste0(predfolder,"/chfrags_conus.rds"))
+chfrags <- readRDS(paste0(predfolder,"/chfrags_conus.rds"))
+## Sum together rock frag vols for all recorded rock sizes for each horizon
+frags_chkey <- plyr::ddply(chfrags,~chkey,summarise,fragvol_r = sum(fragvol_r))
+pts.ext.hor <- left_join(pts.ext.hor,frags_chkey,by="chkey")
+pts.ext.hor$fragvol_r <- ifelse(is.na(pts.ext.hor$fragvol_r), 0, pts.ext.hor$fragvol_r) # NAs set to zero as these are not recorded in chfrags table
+
+##### Bring in original NASIS data to use those estimates as primary source of rock fragments
+## NOTE: NOT USING SCD DATA FOR ROCK DUE TO LACK OF >3" DATA
+load(paste0(pedonfldr,"/nasis_pedons_20210325.RData")) # object named spc
+# nasis_ped_pts <- spc@site[spc@site$peiid %in% okpeiids,c("peiid","x_std","y_std")]
+# nasis_ped_pts <- subset(nasis_ped_pts,!is.na(nasis_ped_pts$x_std))
+# ## Create sp object
+# coordinates(nasis_ped_pts) <- ~ x_std + y_std
+# proj4string(nasis_ped_pts) <- CRS(SRS_string = "EPSG:4326")
+# nasis_ped_pts <- spTransform(nasis_ped_pts, cov.proj) # project to match rasters
+# nasis_ped_pts <- nasis_ped_pts[polybound,]
+# ## Extract covariates
+# ## Parallelized extract for nasis points: (larger datasets)
+# rasterOptions(maxmemory = 2e+09)
+# nas.pedpts.ext <- DSMprops::parPTextr(sp = nasis_ped_pts, gridlist = cov.grids, os = "linux",nthreads = 62)
+# ## Save points
+# saveRDS(nas.pedpts.ext, paste(predfolder,"/CONUS_nasis_pedpts_extracted_spatcovs.rds",sep=""))
+## Updated extract for CONUS
+nas.pedpts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_pedpts_extracted_spatcovs.rds",sep=""))
+## Now attach geo weights
+nas.pedpts.ext <- left_join(nas.pedpts.ext, pts_geocode, by = "peiid")
+nas.pedpts.ext <- left_join(nas.pedpts.ext, s[,c("peiid","obsdate","obsdatekind")], by = "peiid")
+nas.pedpts.ext$obsdate <- as.Date(nas.pedpts.ext$obsdate)
+nas.pedpts.ext$geo_wt <- ifelse(nas.pedpts.ext$geo_wt==8 & nas.pedpts.ext$obsdate > "2000-01-01" & nas.pedpts.ext$obsdatekind == "actual site observation date",
+                                7,nas.pedpts.ext$geo_wt)
+nas.pedpts.ext$geo_wt <- ifelse(is.na(nas.pedpts.ext$geo_wt),8,nas.pedpts.ext$geo_wt) # 18.8k NAs put in class 8
+
+
+## List of pedons to exclude from SCD data with errors in texture mod versus rock volume estimates
+badpeiids <- read.csv(paste0(pedonfldr,"/nomatch_texmod_peiid.csv"),stringsAsFactors = F)
+## remove bad peiids from NASIS field data
+nas.pedpts.ext <- nas.pedpts.ext[!nas.pedpts.ext$peiid %in% badpeiids$nomatch_peiid,]
+## Now remove pts from nasis-ssurgo data that already have a field estimate
+pts.ext.hor <- pts.ext.hor[!pts.ext.hor$peiid %in% nas.pedpts.ext$peiid,]
+
 ## Prep nasis training data for Random Forest
-pts.ext.hor$prop <- pts.ext.hor$awc_r  ## UPDATE EVERY TIME
-prop <- "awc_r" ## Dependent variable
+pts.ext.hor$prop <- pts.ext.hor[,prop]  ## UPDATE EVERY TIME
 hist(pts.ext.hor$prop)
 summary(pts.ext.hor$prop)
 ## Set transformation and scaling: UPDATE EVERY TIME!!!!!!!!!!!!!!!!
-trans <- "none" # none, log10, log, or sqrt
-data_type <- "INT2U" # from raster::dataType - INT1U, INT1S, INT2S, INT2U, INT4S, INT4U, FLT4S, FLT8S
-datastretch <- 100
+trans <- "log" # none, log10, log, or sqrt
+data_type <- "INT1U" # from raster::dataType - INT1U, INT1S, INT2S, INT2U, INT4S, INT4U, FLT4S, FLT8S
+datastretch <- 1
 datastretchlab <- paste(datastretch,"x",sep="")
+pts.ext.hor$prop <- ifelse(pts.ext.hor$prop > 100, 100, pts.ext.hor$prop) # Can't have higher than 100% rock
 
-##### Load and prep SCD data
-## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
-con <- dbConnect(RSQLite::SQLite(), paste0(pedonfldr,"/KSSL-data.sqlite")) # once synced switch to:
-(ldm_names <- dbListTables(con))
-ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","Bulk_Density_and_Moisture","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
-names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","Bulk_Density_and_Moisture","NCSS_Pedon_Taxonomy")
-dbDisconnect(con)
-
-## Now wrangle tables
-scd.hor <- inner_join(ldm$NCSS_Layer,ldm$Bulk_Density_and_Moisture[!duplicated(ldm$Bulk_Density_and_Moisture$labsampnum),],by="labsampnum")
-ldm$NCSS_Pedon_Taxonomy$peiid <- ldm$NCSS_Pedon_Taxonomy$pedoniid
-scd.pts <- ldm$NCSS_Site_Location
-scd.pts <- left_join(scd.pts,ldm$NCSS_Pedon_Taxonomy[ldm$NCSS_Pedon_Taxonomy$site_key %in% scd.pts$site_key, c("site_key","peiid")], by="site_key")
-
-# ### SCD prep: Weed out points with imprecise coordinates ###
-scd.pts$latnchar <- nchar(abs(scd.pts$latitude_decimal))
-scd.pts$longnchar <- nchar(abs(scd.pts$longitude_decima))
-scd.pts <- subset(scd.pts, scd.pts$latnchar > 5 & scd.pts$longnchar > 6)
-## Location ID for later use and remove duplicates
-scd.pts$locid <- paste(scd.pts$latitude_decimal,scd.pts$longitude_decima,sep="_")
-scd.pts <- scd.pts[!duplicated(scd.pts$locid),] # Over 20k duplicates...
-scd.pts <- scd.pts[!duplicated(scd.pts$peiid),]
-
-### Turn into spatial file
-coordinates(scd.pts) <- ~ longitude_decima + latitude_decimal # Typos in sqlite KSSL snapshot...
-temp.proj <- CRS("+proj=longlat +datum=WGS84") ## specify projection
-projection(scd.pts) <- temp.proj
-# ######## Clip with boundary if necessary ###########
-scd.pts <- spTransform(scd.pts, cov.proj)
-scd.pts <- scd.pts[polybound,]
-
-## Further SCD prep
-## Extract covariates for prediction onto SCD points
-# rasterOptions(maxmemory = 2e+10)
-# scd.pts.ext <- DSMprops::parPTextr(scd.pts, cov.grids, os = "windows", nthreads=124)
-# ## Save scd pts with extraction
-# saveRDS(scd.pts.ext, paste(ptsfolder,"/SCD","_extracted_covs.rds",sep=""))
-scd.pts.ext <- readRDS(paste(ptsfolder,"/SCD","_extracted_covs.rds",sep=""))
-## Create geo-coordinate quality weights
-scd.pts.ext$date <- as.Date(scd.pts.ext$site_obsdate, format = "%m/%d/%Y")
-scd.pts.ext$decdate <- lubridate::decimal_date(scd.pts.ext$date)
-scd.pts.ext$peiid <- as.character(scd.pts.ext$peiid)
-scd.pts.ext <- left_join(scd.pts.ext, pts_geocode, by="peiid")
-scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt) & scd.pts.ext$date >= "2010-01-01", 6, scd.pts.ext$geo_wt)
-scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt) & scd.pts.ext$date >= "2000-01-01", 7, scd.pts.ext$geo_wt)
-scd.pts.ext$geo_wt <- ifelse(is.na(scd.pts.ext$geo_wt), 8, scd.pts.ext$geo_wt) ## Awful lot of class 8s...
-scd.pts.ext$geo_wt <- ifelse(scd.pts.ext$geo_wt == 8 & scd.pts.ext$date >= "2000-01-01", 7, scd.pts.ext$geo_wt) #updated 7/8/21
+##### Load and prep SCD data: Note, for rock, field observations (nas.pedpts.ext) will be the equivalent of 'SCD' data as they are our best estimates
+scd.pts.ext <- nas.pedpts.ext
+scd.pts.ext$locid <- paste(scd.pts.ext$y_std,scd.pts.ext$x_std,sep="_")
+scd.pts.ext <- scd.pts.ext[!duplicated(scd.pts.ext$locid),] # Over 20k duplicates...
+scd.pts.ext <- scd.pts.ext[!duplicated(scd.pts.ext$peiid),]
 
 ## Now join scd.hor to scd.pts and get rid of any duplicates
-scd.pts.ext.hor <- inner_join(scd.hor,scd.pts.ext, by="site_key")
-scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzn_bot,scd.pts.ext.hor$locid,sep="_") # compound ID to remove horizon duplicates
+scd.pts.ext.hor <- inner_join(spc@horizons,scd.pts.ext, by="peiid")
+scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzdepb,scd.pts.ext.hor$locid,sep="_") # compound ID to remove horizon duplicates
 scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
 
 ## SCD prep for RF
-scd.pts.ext.hor$prop <- scd.pts.ext.hor$wrd_ws13 ## UPDATE everytime!
-scdprop <- "wrd_ws13"
+scd.pts.ext.hor$prop <- scd.pts.ext.hor$total_frags_pct_nopf  ## UPDATE everytime!
+scdprop <- "total_frags_pct_nopf"
 scd.pts.ext.hor$tid <- "scd"
 hist(scd.pts.ext.hor$prop)
 summary(scd.pts.ext.hor$prop)
-scd.pts.ext.hor <- subset(scd.pts.ext.hor, scd.pts.ext.hor$prop >= 0) # Get rid of ~100 negative values (not possible)
+scd.pts.ext.hor$prop <- ifelse(scd.pts.ext.hor$prop > 100, 100, scd.pts.ext.hor$prop) # Can't have > 100% rock
+
+## Change NASIS terms to SCD terms for loop function
+scd.pts.ext.hor$hzn_top <- scd.pts.ext.hor$hzdept
+scd.pts.ext.hor$hzn_bot <- scd.pts.ext.hor$hzdepb
 
 ## Prep base raster for density calculations and spatial cross validation
 # rasterOptions(maxmemory = 5e+08,chunksize = 5e+07)
@@ -200,13 +236,25 @@ img10kf <- readRDS(paste(pedonfldr,"/img10kf.rds",sep=""))
 img10kfid <- img10kf
 values(img10kfid) <- 1:ncell(img10kfid)
 img10kfid <- overlay(stack(img10kfid,img10kf),fun=function(a,b){a*b})
-## Bring in feature space weights reference distributions
-ft_wts_ref <- readRDS(paste0(pedonfldr,"/ref_df.RDS")) # From Stephen Roecker, 5/3/2021
 
 ##### Loop to train and predict properties for all depths
 depths <- c(0,5,15,30,60,100,150)
 for(d in depths){
   pretime <- Sys.time()
+  ## Set up gNATSGO training points
+  pts.gNAT.d <- pts.gNAT[,c("x","y",gsub(".tif","",cov.grids.names),colnames(pts.gNAT)[grepl(paste0("_",d,"_"),colnames(pts.gNAT))])]
+  pts.gNAT.d$prop <- as.numeric(pts.gNAT.d[,paste0(prop,"_mean_",datastretchlab,"_",d,"_cm_gNATSGO")])/datastretch
+  pts.gNAT.d[,paste0(prop,"_mean_",datastretchlab,"_",d,"_cm_gNATSGO")] <- NULL
+  pts.gNAT.d <- na.omit(pts.gNAT.d)
+  pts.gNAT.d$mtchtype <- "gNAT"
+  pts.gNAT.d$peiid <- paste0("gNAT_",1:nrow(pts.gNAT.d))
+  pts.gNAT.d$tid <- "gNAT"
+  pts.gNAT.d$geo_wt <- 9
+  pts.gNAT.d$locid <- paste(pts.gNAT.d$x,pts.gNAT.d$y,sep="_")
+  pts.gNAT.d$x_std <- pts.gNAT.d$x
+  pts.gNAT.d$y_std <- pts.gNAT.d$y
+  pts.gNAT.d[,c("x","y")] <- NULL
+  ## Now NASIS pts
   pts.extc <- subset(pts.ext.hor, as.numeric(pts.ext.hor$hzdept_r) <= d & as.numeric(pts.ext.hor$hzdepb_r) > d) # subset to chosen depth
   ptspred.list <- gsub(".tif","", cov.grids.names)# Take .tif off of the grid list to just get the variable names
   ptspred.list <- c(ptspred.list,"prop","mtchtype","peiid","tid","x_std","y_std","geo_wt","locid") #Add dependent variable
@@ -214,14 +262,12 @@ for(d in depths){
   pts.extcc <- na.omit(pts.extcc)# Remove any record with NA's (in any column - be careful)
   ### Check for duplication with lab pedons
   scd.pts.d <- subset(scd.pts.ext.hor, as.numeric(scd.pts.ext.hor$hzn_top) <= d & as.numeric(scd.pts.ext.hor$hzn_bot) > d)
-  ## Remove SCD dups
-  scd.pts.d <- scd.pts.d[!duplicated(scd.pts.d$locid),]
-  scd.pts.d$x_std <- scd.pts.d$longitude_decima
-  scd.pts.d$y_std <- scd.pts.d$latitude_decimal
   scd.pts.d$mtchtype <- "scd"
   scd.pts.d$tid <- "scd"
+  scd.pts.d$lat <- scd.pts.d$y_std
+  scd.pts.d$long <- scd.pts.d$x_std
   ## Check for duplicated pedons between NASIS and SCD using buffers
-  coordinates(scd.pts.d) <- ~ longitude_decima + latitude_decimal
+  coordinates(scd.pts.d) <- ~ long + lat
   projection(scd.pts.d) <- cov.proj
   pts.buf <- n.pts[n.pts$peiid %in% pts.extcc$peiid,]
   scd.pts.d.bufc <- raster::buffer(scd.pts.d,width=5,dissolve=F)
@@ -232,14 +278,15 @@ for(d in depths){
   scd.pts.d <- scd.pts.d@data
   scd.pts.d <- scd.pts.d[,c(ptspred.list)]
   scd.pts.d <- na.omit(scd.pts.d)
-  pts.extcc <- rbind(pts.extcc,scd.pts.d)
+  pts.extcc <- rbind(pts.extcc,scd.pts.d,pts.gNAT.d)
   coordinates(pts.extcc) <- ~ x_std + y_std
   projection(pts.extcc) <- cov.proj
   ## Geocode classes
   pts.extcc@data <- dplyr::mutate(pts.extcc@data, geo_cls = ifelse(geo_wt<6,"gps",NA),
                                   geo_cls = ifelse(geo_wt==6,"gps2",geo_cls),
                                   geo_cls = ifelse(geo_wt==7,"gps3",geo_cls),
-                                  geo_cls = ifelse(geo_wt==8,"unk",geo_cls))
+                                  geo_cls = ifelse(geo_wt==8,"unk",geo_cls),
+                                  geo_cls = ifelse(geo_wt==9,"gNAT",geo_cls))
   #pts.extcc@data <- left_join(pts.extcc@data, pts_qual_cls[,c("peiid","source")], by="peiid")
   ## Apply transformation
   if(trans=="log10") {pts.extcc$prop_t <- log10(pts.extcc$prop + 0.1)}
@@ -249,7 +296,7 @@ for(d in depths){
   ## Save pts available for modeling file
   saveRDS(pts.extcc, paste(predfolder,"/AvailPTS_", prop, '_',d, "_cm.rds",sep=""))
   #pts.extcc <- readRDS(paste(predfolder,"/AvailPTS_", prop, '_',d, "_cm.rds",sep=""))
-  ## Set up QRF formula and matrices
+  ## Set up QRF formula
   formulaStringRF <- as.formula(paste('prop_t ~', paste(gsub(".tif","", cov.grids.names), collapse="+")))
 
   ############ Cross Validate and examine metrics among Lab and Nasis pedons ##########
@@ -267,8 +314,9 @@ for(d in depths){
 
   ## Call function to estimate gRPI using each data subset as training data
   Sys.time()
-  data_grid_df <- DSMprops::gRPI_estim_ranger(x = pts.extcc@data, gsamp = pts.gRPI, fm = formulaStringRF, griddf = grid_vec, os="linux",
-                                               train.params = trn.params, nthreads = 124)
+  ptsforgRPI.d <- pts.extcc@data[pts.extcc@data$mtchtype != "gNAT",]
+  data_grid_df <- DSMprops::gRPI_estim_ranger(x = ptsforgRPI.d, gsamp = pts.gRPI, fm = formulaStringRF, griddf = grid_vec, os="linux",
+                                              train.params = trn.params, nthreads = cpus)
   Sys.time()
 
   ## Now pick model mode ranking on gRPI and Rsq
@@ -281,11 +329,8 @@ for(d in depths){
   gRPI_best <- data_grid_df[data_grid_df$rank_final==min(data_grid_df$rank_final),]$gRPIfinal
   ## Save RPI table
   write.table(data_grid_df, paste(predfolder,"/gRPIs_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
-  data_grid_df <- read.delim(paste(predfolder,"/gRPIs_", prop,"_", d, "_cm.txt",sep=""),stringsAsFactors = F)
+  # data_grid_df <- read.delim(paste(predfolder,"/gRPIs_", prop,"_", d, "_cm.txt",sep=""),stringsAsFactors = F)
   ## Select points from overall dataset based on combined rankings
-  if(d == 30 | d == 60 | d == 15){ ## Special case to deal with poor Rsq chosen in 30 and 60cm models
-    data_grid_df[data_grid_df$datagrid == "geo_gps_gps2_gps3_srce_scd_direct_home",]$rank_final <- 0
-  }
   model_params <- str_split(data_grid_df[data_grid_df$rank_final==min(data_grid_df$rank_final),c("datagrid")][1],"_")[[1]]
   quant_l <- data_grid_df[data_grid_df$rank_final==min(data_grid_df$rank_final),c("quant_l")]
   quant_h <- data_grid_df[data_grid_df$rank_final==min(data_grid_df$rank_final),c("quant_h")]
@@ -293,41 +338,30 @@ for(d in depths){
   srce_params <- model_params[(match("srce",model_params)+1):length(model_params)]
   geo_params <- model_params[(match("geo",model_params)+1):(match("srce",model_params)-1)]
   ## Subset training points to new optimized dataset
-  pts.pcv <- pts.extcc[pts.extcc$mtchtype %in% srce_params,]
-  pts.pcv <- pts.pcv[(pts.pcv$mtchtype=="scd"&pts.pcv$geo_wt<8)|(pts.pcv$geo_cls %in% geo_params),] # subset, but leave scd > 2000
-
-
-  ########### Recursive feature elimination
-  #The simulation will fit models a set number of covariate subsets based on an initial full model variable importance
-  rf.rfe.init <- ranger(formulaStringRF, data=pts.pcv@data, num.trees = trn.params$ntrees, num.threads = 124,
-                   min.node.size = trn.params$min.node.size, importance = "permutation")
-  vars.imp <- data.frame(import = unname(rf.rfe.init$variable.importance), var = names(rf.rfe.init$variable.importance))
-  vars.imp <- vars.imp[order(vars.imp$import),]
-  formulaStringRF_RFE <- formulaStringRF # Testing not having feature reduction
-
-  ## TODO!!!!!!!!!!!!!!!! Update formula handling in CV and sCV functions
+  pts.pcv <- pts.extcc[pts.extcc$mtchtype %in% srce_params | pts.extcc$mtchtype == "gNAT",]
+  pts.pcv <- pts.pcv[(pts.pcv$mtchtype=="scd"&pts.pcv$geo_wt<8)|(pts.pcv$geo_cls %in% geo_params) | pts.pcv$mtchtype == "gNAT",] # subset, but leave scd > 2000
 
   ######### Match best CV scheme using gRPI.ave
   ## Normal 10-fold cross validation
   cv10f <- DSMprops::CVranger(x = pts.pcv@data, fm = formulaStringRF, train.params = trn.params,quants=quants_vec,
-                              nfolds = 10, nthreads = 124, os = "linux") # 5min
+                              nfolds = 10, nthreads = cpus, os = "linux") # 5min
   ## Spatial 10-fold cross validation on 1km blocks
   s1cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,quants=quants_vec,
-                                    rast = img10kf, nfolds = 10, nthreads = 124, resol = 1, os = "linux") # 6 min
+                                    rast = img10kf, nfolds = 10, nthreads = cpus, resol = 1, os = "linux") # 6 min
   ## Spatial 10-fold cross validation on 10km blocks
   s10cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,quants=quants_vec,
-                                     rast = img10kf, nfolds = 10, nthreads = 124, resol = 10, os = "linux") # 6min
+                                     rast = img10kf, nfolds = 10, nthreads = cpus, resol = 10, os = "linux") # 6min
   ## Spatial 10-fold cross validation on 50km blocks
   s50cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,quants=quants_vec,
-                                     rast = img10kf, nfolds = 10, nthreads = 124, resol = 50, os = "linux") # 6min
+                                     rast = img10kf, nfolds = 10, nthreads = cpus, resol = 50, os = "linux") # 6min
   ## Spatial 10-fold cross validation on 100km blocks
   s100cv10f <- DSMprops::SpatCVranger(sp = pts.pcv, fm = formulaStringRF, train.params = trn.params,quants=quants_vec,
-                                      rast = img10kf, nfolds = 10, nthreads = 124, resol = 100, os = "linux")
+                                      rast = img10kf, nfolds = 10, nthreads = cpus, resol = 100, os = "linux")
 
   ## Combine CV tables and save in list as R object
   cv.lst <- list(cv10f,s1cv10f,s10cv10f,s50cv10f, s100cv10f)
-  saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep="")) # takes forever...
-  #cv.lst <- readRDS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep=""))
+  # saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep="")) # takes forever...
+  # #cv.lst <- readRDS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep=""))
 
   ## Validation metrics for CVs at different spatial supports
   valmets_sCV <- DSMprops::valmetrics(xlst = cv.lst, trans = trans, quants = quants_vec, prop = prop, depth = d)
@@ -420,11 +454,7 @@ for(d in depths){
   #gplt.dcm.2D.CV.gSCD
   ggsave(paste(predfolder,'/ValPlot_1to1_gscd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.CV.gSCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
 
-
-  ## TODO RFE... ? model tuning step for mtry, min node size, ntrees, other params???
-
   ############### Build quantile Random Forest
-  ## TODO incorporate updated weighting or tuning parameters???????
   ## Determine 95% interquartile range for relative prediction interval
   varrange <- as.numeric(quantile(pts.pcv@data$prop, probs=c(0.975), na.rm=T)-quantile(pts.pcv@data$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
   if(varrange == 0) {varrange <- as.numeric(quantile(pts.pcv@data$prop, probs=c(0.995), na.rm=T)-quantile(pts.pcv@data$prop, probs=c(0.005),na.rm=T))}
@@ -442,7 +472,7 @@ for(d in depths){
   # imp <- data.frame(var=names(importance(rf.qrf)),imp_meas = unname(importance(rf.qrf)))
   # imp[order(imp$imp_meas, decreasing = T),][1:30,]
   ## Linear Adjustment for bias in low and high predictions
-  pts.pcv@data$trainpreds <- predict(rf.qrf, data=pts.pcv@data, num.threads = 124)$predictions
+  pts.pcv@data$trainpreds <- predict(rf.qrf, data=pts.pcv@data, num.threads = cpus)$predictions
   attach(pts.pcv@data)
   rf_lm_adj <- lm(prop_t ~ trainpreds)
   detach(pts.pcv@data)
@@ -464,14 +494,11 @@ for(d in depths){
 
   ## Ranger Predict
   predfun <- function(model, ...) predict(model, ...)$predictions
-  # TODO figure out why internal ranger parallelization did not seem to work.
-  # predtst <- predict(rasters, rf.qrf, fun=predfun, type="response", progress="text", num.threads = 50)
-
 
   ## Predict onto covariate grid
   ## Parallelized predict
-  rasterOptions(maxmemory = 6e+09,chunksize = 8e+08)# maxmemory = 1e+09,chunksize = 1e+08 for soilmonster
-  beginCluster(124,type='SOCK')
+  rasterOptions(maxmemory = 6.5e+09,chunksize = 6e+08)# maxmemory = 6e+09,chunksize = 6e+08 40-50% cpu, 530GB
+  beginCluster(cpus,type='SOCK')
   Sys.time()
   predl <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.025)),progress="text")
   Sys.time()
@@ -597,48 +624,4 @@ for(d in depths){
   runtime <- posttime - pretime
   print(paste(d, " cm was done at", posttime,"in",runtime, sep=" "))
 }
-
-
-############# Masking water pixels out ############
-# nlcd <- raster("/home/tnaum/data/UCRB_Covariates/NLCDcl.tif")
-# beginCluster(30,type='SOCK')
-## Make a mask raster
-# mask_fn <- function(nlcd){ind <- ifelse(nlcd!=11,1,NA)
-#   return(ind)
-# }
-# mask <- clusterR(nlcd, calc, args=list(fun=mask_fn),progress='text')
-# endCluster()
-# plot(mask)
-# writeRaster(mask, overwrite=TRUE,filename="/home/tnaum/data/BLMsoils/nlcd_watermask.tif", options=c("COMPRESS=DEFLATE", "TFW=YES"), progress="text",datatype='INT1U')
-# rm(mask)
-## Now set up a list of rasters and function to mask out water
-# rasterOptions(maxmemory = 1e+09,chunksize = 1e+08)
-# setwd("/home/tnaum/data/BLMsoils/Sand_2D_NASIS_SSURGO_SCD")
-# grids <- list.files(pattern=".tif$")
-# mskfn <- function(rast,mask){
-#   ind <- rast*mask
-#   ind[ind<0]<-0 # to bring the slighly negative predictions back to zero
-#   return(ind)
-# }
-# ## par list apply fn
-# watermask_fn <- function(g){
-#   setwd("/home/tnaum/data/BLMsoils/Sand_2D_NASIS_SSURGO_SCD")
-#   rast <- raster(g)
-#   names(rast) <- "rast"
-#   setwd("/home/tnaum/data/BLMsoils")
-#   mask <- raster("/home/tnaum/data/BLMsoils/nlcd_watermask.tif")
-#   h2ostk <- stack(rast,mask)
-#   setwd("/home/tnaum/data/BLMsoils/Sand_2D_NASIS_SSURGO_SCD/masked")
-#   overlay(h2ostk,fun=mskfn,progress='text',filename=g, options=c("COMPRESS=DEFLATE", "TFW=YES"))
-#   gc()
-# }
-# snowfall::sfInit(parallel=TRUE, cpus=30)
-# snowfall::sfExport("watermask_fn","mskfn","grids")
-# snowfall::sfLibrary(raster)
-# Sys.time()
-# snowfall::sfLapply(grids, function(g){watermask_fn(g)})
-# Sys.time()
-# snowfall::sfStop()
-
-
 

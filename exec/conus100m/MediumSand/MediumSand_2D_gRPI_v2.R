@@ -17,11 +17,11 @@ lapply(required.packages, require, character.only=T)
 rm(required.packages, new.packages)
 ## Increase actuve memory useable by raster package: Windows only
 #memory.limit(500000)
-rasterOptions(maxmemory = 1e+09, chunksize = 1e+08, memfrac = 0.9)
+rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 cpus <- min(detectCores()-2, 124)
 
 ## Key Folder Locations
-predfolder <- "/mnt/disks/sped/solus100preds/v2tst_gnat_pts/BD_gRPI_250k"
+predfolder <- "/mnt/disks/sped/solus100preds/v2tst_gnat_pts/MediumSand_gRPI_250k"
 repofolder <- "/mnt/disks/sped/repos/DSMprops"
 covfolder <- "/mnt/disks/sped/covs100m"
 propcovfldr <- "/mnt/disks/sped/covs100m_by_prop"
@@ -52,7 +52,7 @@ n.pts@data <- n.pts@data[,c("peiid","mtchtype","compname")]
 
 
 ### Define SSURGO property for modeling and covariate layer selection
-prop <- "dbovendry_r" ## Dependent variable: UPDATE EVERY TIME
+prop <- "sandmed_r" ## Dependent variable: UPDATE EVERY TIME
 
 
 ######### Grid Prep #################
@@ -106,7 +106,7 @@ pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp_covs.rds",sep=""))
 # pts.gNAT <- readRDS(paste0(ptsfolder,"/CONUS_random_gNATsamp_250k.rds"))
 # rasterOptions(maxmemory = 1.5e+10)
 # pts.gNAT <- DSMprops::parPTextr(sp = pts.gNAT, gridlist = gNATpts_cov.grids, os = "windows",nthreads = cpus)
-# # ## Save points
+# ## Save points
 # saveRDS(pts.gNAT, paste(ptsfolder,"/CONUS_random_gNATsamp_250k_covs_",prop,"_",".rds",sep=""))
 pts.gNAT <- readRDS(paste(ptsfolder,"/CONUS_random_gNATsamp_250k_covs_",prop,"_",".rds",sep=""))
 
@@ -139,20 +139,20 @@ hist(pts.ext.hor$prop)
 summary(pts.ext.hor$prop)
 ## Set transformation and scaling: UPDATE EVERY TIME!!!!!!!!!!!!!!!!
 trans <- "none" # none, log10, log, or sqrt
-data_type <- "INT2U" # from raster::dataType - INT1U, INT1S, INT2S, INT2U, INT4S, INT4U, FLT4S, FLT8S
-datastretch <- 100
+data_type <- "INT1U" # from raster::dataType - INT1U, INT1S, INT2S, INT2U, INT4S, INT4U, FLT4S, FLT8S
+datastretch <- 1
 datastretchlab <- paste(datastretch,"x",sep="")
 
 ##### Load and prep SCD data
 ## RSQlite workflow form https://github.com/ncss-tech/gsp-sas/blob/master/lab_data.Rmd
 con <- dbConnect(RSQLite::SQLite(), paste0(pedonfldr,"/KSSL-data.sqlite"))
 (ldm_names <- dbListTables(con))
-ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","Bulk_Density_and_Moisture","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
-names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","Bulk_Density_and_Moisture","NCSS_Pedon_Taxonomy")
+ldm <- lapply(c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy"), function(x) dbReadTable(con , x))
+names(ldm) <- c("NCSS_Layer","NCSS_Site_Location","PSDA_and_Rock_Fragments","NCSS_Pedon_Taxonomy")
 dbDisconnect(con)
 
 ## Now wrangle tables
-scd.hor <- inner_join(ldm$NCSS_Layer,ldm$Bulk_Density_and_Moisture[!duplicated(ldm$Bulk_Density_and_Moisture$labsampnum),],by="labsampnum")
+scd.hor <- inner_join(ldm$NCSS_Layer,ldm$PSDA_and_Rock_Fragments[!duplicated(ldm$PSDA_and_Rock_Fragments$labsampnum),],by="labsampnum")
 ldm$NCSS_Pedon_Taxonomy$peiid <- ldm$NCSS_Pedon_Taxonomy$pedoniid
 scd.pts <- ldm$NCSS_Site_Location
 scd.pts <- left_join(scd.pts,ldm$NCSS_Pedon_Taxonomy[ldm$NCSS_Pedon_Taxonomy$site_key %in% scd.pts$site_key, c("site_key","peiid")], by="site_key")
@@ -197,12 +197,12 @@ scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzn_bot,scd.pts.ext.hor$l
 scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
 
 ## SCD prep for RF
-scd.pts.ext.hor$prop <- scd.pts.ext.hor$db_od ## UPDATE everytime!
-scdprop <- "db_od"
+scd.pts.ext.hor$prop <- scd.pts.ext.hor$sand_m_psa ## UPDATE everytime!
+scdprop <- "sand_m_psa"
 scd.pts.ext.hor$tid <- "scd"
 hist(scd.pts.ext.hor$prop)
 summary(scd.pts.ext.hor$prop)
-scd.pts.ext.hor <- subset(scd.pts.ext.hor, scd.pts.ext.hor$prop >= 0) # 10 negative values - not possible for BD.
+scd.pts.ext.hor <- subset(scd.pts.ext.hor, scd.pts.ext.hor$prop >= 0) # 10 negative values - not possible for clay.
 
 ## Prep base raster for density calculations and spatial cross validation
 # rasterOptions(maxmemory = 5e+08,chunksize = 5e+07)
@@ -328,9 +328,10 @@ for(d in depths){
   quants_vec <- c(quant_l,quant_h)
   srce_params <- model_params[(match("srce",model_params)+1):length(model_params)]
   geo_params <- model_params[(match("geo",model_params)+1):(match("srce",model_params)-1)]
-  ## Subset training points to new optimized dataset and combine with gNATSGO points
+  ## Subset training points to new optimized dataset
   pts.pcv <- pts.extcc[pts.extcc$mtchtype %in% srce_params | pts.extcc$mtchtype == "gNAT",]
   pts.pcv <- pts.pcv[(pts.pcv$mtchtype=="scd"&pts.pcv$geo_wt<8)|(pts.pcv$geo_cls %in% geo_params) | pts.pcv$mtchtype == "gNAT",] # subset, but leave scd > 2000
+
 
   ######### Match best CV scheme using gRPI.ave
   ## Normal 10-fold cross validation
@@ -447,6 +448,7 @@ for(d in depths){
 
 
   ############### Build quantile Random Forest
+  ## TODO incorporate updated weighting or tuning parameters???????
   ## Determine 95% interquartile range for relative prediction interval
   varrange <- as.numeric(quantile(pts.pcv@data$prop, probs=c(0.975), na.rm=T)-quantile(pts.pcv@data$prop, probs=c(0.025),na.rm=T)) ## TRANSFORM IF NEEDED!
   if(varrange == 0) {varrange <- as.numeric(quantile(pts.pcv@data$prop, probs=c(0.995), na.rm=T)-quantile(pts.pcv@data$prop, probs=c(0.005),na.rm=T))}
@@ -464,7 +466,7 @@ for(d in depths){
   # imp <- data.frame(var=names(importance(rf.qrf)),imp_meas = unname(importance(rf.qrf)))
   # imp[order(imp$imp_meas, decreasing = T),][1:30,]
   ## Linear Adjustment for bias in low and high predictions
-  pts.pcv@data$trainpreds <- predict(rf.qrf, data=pts.pcv@data, num.threads = 124)$predictions
+  pts.pcv@data$trainpreds <- predict(rf.qrf, data=pts.pcv@data, num.threads = cpus)$predictions
   attach(pts.pcv@data)
   rf_lm_adj <- lm(prop_t ~ trainpreds)
   detach(pts.pcv@data)
@@ -489,7 +491,7 @@ for(d in depths){
 
   ## Predict onto covariate grid
   ## Parallelized predict
-  rasterOptions(maxmemory = 6e+09,chunksize = 5e+08)# maxmemory = 6e+09,chunksize = 6e+08 40-50% cpu, 530GB
+  rasterOptions(maxmemory = 6.5e+09,chunksize = 4e+08)# maxmemory = 6e+09,chunksize = 6e+08 40-50% cpu, 530GB
   beginCluster(cpus,type='SOCK')
   Sys.time()
   predl <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.025)),progress="text")
@@ -616,6 +618,5 @@ for(d in depths){
   runtime <- posttime - pretime
   print(paste(d, " cm was done at", posttime,"in",runtime, sep=" "))
 }
-
 
 

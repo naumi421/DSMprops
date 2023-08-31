@@ -17,11 +17,11 @@ lapply(required.packages, require, character.only=T)
 rm(required.packages, new.packages)
 ## Increase actuve memory useable by raster package: Windows only
 #memory.limit(500000)
-rasterOptions(maxmemory = 1e+09, chunksize = 1e+08, memfrac = 0.9)
+rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 cpus <- min(detectCores()-2, 124)
 
 ## Key Folder Locations
-predfolder <- "/mnt/disks/sped/solus100preds/v2tst_gnat_pts/BD_gRPI_250k"
+predfolder <- "/mnt/disks/sped/solus100preds/v2tst_gnat_pts/AWC_gRPI_250k"
 repofolder <- "/mnt/disks/sped/repos/DSMprops"
 covfolder <- "/mnt/disks/sped/covs100m"
 propcovfldr <- "/mnt/disks/sped/covs100m_by_prop"
@@ -52,7 +52,7 @@ n.pts@data <- n.pts@data[,c("peiid","mtchtype","compname")]
 
 
 ### Define SSURGO property for modeling and covariate layer selection
-prop <- "dbovendry_r" ## Dependent variable: UPDATE EVERY TIME
+prop <- "awc_r" ## Dependent variable: UPDATE EVERY TIME
 
 
 ######### Grid Prep #################
@@ -197,12 +197,12 @@ scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzn_bot,scd.pts.ext.hor$l
 scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
 
 ## SCD prep for RF
-scd.pts.ext.hor$prop <- scd.pts.ext.hor$db_od ## UPDATE everytime!
-scdprop <- "db_od"
+scd.pts.ext.hor$prop <- scd.pts.ext.hor$wrd_ws13 ## UPDATE everytime!
+scdprop <- "wrd_ws13"
 scd.pts.ext.hor$tid <- "scd"
 hist(scd.pts.ext.hor$prop)
 summary(scd.pts.ext.hor$prop)
-scd.pts.ext.hor <- subset(scd.pts.ext.hor, scd.pts.ext.hor$prop >= 0) # 10 negative values - not possible for BD.
+scd.pts.ext.hor <- subset(scd.pts.ext.hor, scd.pts.ext.hor$prop >= 0) # 10 negative values - not possible for clay.
 
 ## Prep base raster for density calculations and spatial cross validation
 # rasterOptions(maxmemory = 5e+08,chunksize = 5e+07)
@@ -328,7 +328,7 @@ for(d in depths){
   quants_vec <- c(quant_l,quant_h)
   srce_params <- model_params[(match("srce",model_params)+1):length(model_params)]
   geo_params <- model_params[(match("geo",model_params)+1):(match("srce",model_params)-1)]
-  ## Subset training points to new optimized dataset and combine with gNATSGO points
+  ## Subset training points to new optimized dataset
   pts.pcv <- pts.extcc[pts.extcc$mtchtype %in% srce_params | pts.extcc$mtchtype == "gNAT",]
   pts.pcv <- pts.pcv[(pts.pcv$mtchtype=="scd"&pts.pcv$geo_wt<8)|(pts.pcv$geo_cls %in% geo_params) | pts.pcv$mtchtype == "gNAT",] # subset, but leave scd > 2000
 
@@ -489,7 +489,7 @@ for(d in depths){
 
   ## Predict onto covariate grid
   ## Parallelized predict
-  rasterOptions(maxmemory = 6e+09,chunksize = 5e+08)# maxmemory = 6e+09,chunksize = 6e+08 40-50% cpu, 530GB
+  rasterOptions(maxmemory = 6e+09,chunksize = 6e+08)# maxmemory = 6e+09,chunksize = 6e+08 40-50% cpu, 530GB
   beginCluster(cpus,type='SOCK')
   Sys.time()
   predl <- clusterR(rasters, predict, args=list(model=rf.qrf, fun=predfun,type = "quantiles", quantiles = c(0.025)),progress="text")
@@ -616,6 +616,5 @@ for(d in depths){
   runtime <- posttime - pretime
   print(paste(d, " cm was done at", posttime,"in",runtime, sep=" "))
 }
-
 
 
