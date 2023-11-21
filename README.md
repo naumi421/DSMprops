@@ -10,7 +10,7 @@
 A hybrid repository including an R package for commonly used functions
 and project executable scripts (exec folder) documenting current
 workflows for project implementation of digital soil mapping (DSM) models in the Soil Landscapes
-of the United States (SOLUS) 100m product.
+of the United States 100m product (SOLUS100).
 
 ![alt text](https://github.com/naumi421/DSMprops/blob/main/exec/figs/FigX_MapExample_png.png "SOLUS (a) and gNATSGO (b) maps of clay content at 5 cm with associated SOLUS sample density (c), upper (d) and lower (e) 95% prediction intervals (PIs) and relative prediction interval (RPI, f).")
 SOLUS (a) and gNATSGO (b) maps of clay content at 5 cm with associated SOLUS sample density (c), upper (d) and lower (e) 95% prediction intervals (PIs) and relative prediction interval (RPI, f).
