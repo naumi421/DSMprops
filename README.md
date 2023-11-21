@@ -61,7 +61,7 @@ mapping.
 | Depth                    | cm          |                                                  |
 | pH                       | -log[H+]    |                                                  |
 | rock fragments           | % vol.    |                                                  |
-| Bulk Density | g cm^-3^ | Oven Dry |
+| Bulk Density | g cm<sup>-3</sup> | Oven Dry |
 
 # Potential properties to be predicted
 
