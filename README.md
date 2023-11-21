@@ -61,7 +61,7 @@ Nauman, T.W., Kienast-Brown, S, White, D., Brungard, C, Roecker, S, Philippe, J.
 In Preparation for submission to Soil Science Society of America Journal.
 
 ## Properties included in SOLUS100 dataset
-Twenty differnt soil properties were mapped for SOLUS100. All properties were defined consistently with U.S. Soil Survey Geographic Database (SSURGO)
+Twenty different soil properties were mapped for SOLUS100. All properties were defined consistently with U.S. Soil Survey Geographic Database (SSURGO)
 standards. These properties are listed in the table below, but more detailed descriptions can be found in SSURGO documentation.
 
 | Property                 |SSURGO code | Units       | Notes                                            |
