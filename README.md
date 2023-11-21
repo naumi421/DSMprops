@@ -75,6 +75,7 @@ mapping.
 | Soil organic carbon      |soc         | % mass      |                                                  |
 | Sodium Adsorption Ratio  |sar         | unitless    | Ratio of [Na]/([Ca]+[Mg]) in Saturated Paste     |
 | Electrical conductivity  |ec          | dS / m      | Saturated paste                                  |
+
 *New theme created from specified lithic or paralithic restrictions to estimate bedrock depth. 
 
 # Semi-detailed Structure of Project.
