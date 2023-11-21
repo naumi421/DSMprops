@@ -87,7 +87,8 @@ In Preparation for submission to Soil Science Society of America Journal.
 *New theme created from specified lithic or paralithic restrictions to estimate bedrock depth. 
 
 # General Workflow for SOLUS100
-
+![alt text](https://github.com/naumi421/DSMprops/blob/main/exec/figs/Fig1_Workflow_png.png "Process workflow for selecting training data, model building, and model performance assessment..")
+SOLUS100 process workflow for selecting training data, model building, and model performance assessment.
 
 # Semi-detailed Structure of Project.
 
