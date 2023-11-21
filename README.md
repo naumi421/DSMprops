@@ -56,21 +56,21 @@ mapping.
 
 | Property                 |SSURGO code | Units       | Notes                                            |
 | ------------------------ | ---------- | ----------- | ------------------------------------------------ |
-| Clay                     |            | % mass      |                                                  |
-| Silt                     |            | % mass      |                                                  |
-| Sand                     |            | % mass      |                                                  |
-| Very fine sand           |            | % mass      |                                                  |
-| Fine sand                |            | % mass      |                                                  |
-| Medium sand              |            | % mass      |                                                  |
-| Coarse sand              |            | % mass      |                                                  |
-| Very coarse sand         |            | % mass      |                                                  |
-| Depth to bedrock         |            | cm          | Depth to lithic of paralithic contact            |
-| Depth to restriction     |            | cm          | Depth to layer that limits air, water, or roots  |
+| Clay                     |claytotal   | % mass      |                                                  |
+| Silt                     |silttotal   | % mass      |                                                  |
+| Sand                     |sandtotal   | % mass      |                                                  |
+| Very fine sand           |sandvf      | % mass      |                                                  |
+| Fine sand                |sandfine    | % mass      |                                                  |
+| Medium sand              |sandmed     | % mass      |                                                  |
+| Coarse sand              |sandco      | % mass      |                                                  |
+| Very coarse sand         |sandvc      | % mass      |                                                  |
+| Depth to bedrock         |anylithicdpt*| cm          | Depth to lithic of paralithic contact            |
+| Depth to restriction     |resdept     | cm          | Depth to layer that limits air, water, or roots  |
 | pH                       |            | -log[H+]    | 1:1 method                                       |
 | Rock fragments           |            | % vol.      | Particles >2mm, whole soil basis                 |
 | Bulk Density             |dbovendry   | g cm<sup>-3</sup> | Oven Dry                                   |
-| Calcium carbonate        |            | % mass      |                                                  |
-| CEC at pH7               |            | meq / 100g  | Cation Exchange Capacity (CEC) <2mm fraction     |
+| Calcium carbonate        |caco3       | % mass      |                                                  |
+| CEC at pH7               |cec7        | meq / 100g  | Cation Exchange Capacity (CEC) <2mm fraction     |
 | ECEC                     |            | meq / 100g  | Effective CEC                                    |
 | Soil organic carbon      |            | % mass      |                                                  |
 | Sodium Adsorption Ratio  |            | unitless    | Ratio of [Na]/([Ca]+[Mg]) in Saturated Paste     |
