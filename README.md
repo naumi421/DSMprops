@@ -66,15 +66,15 @@ mapping.
 | Very coarse sand         |sandvc      | % mass      |                                                  |
 | Depth to bedrock         |anylithicdpt*| cm         | Depth to lithic of paralithic contact            |
 | Depth to restriction     |resdept     | cm          | Depth to layer that limits air, water, or roots  |
-| pH                       |            | -log[H+]    | 1:1 method                                       |
-| Rock fragments           |            | % vol.      | Particles >2mm, whole soil basis                 |
+| pH                       |ph1to1h2o   | -log[H+]    | 1:1 method                                       |
+| Rock fragments           |fragvol     | % vol.      | Particles >2mm, whole soil basis                 |
 | Bulk Density             |dbovendry   | g cm<sup>-3</sup> | Oven Dry                                   |
 | Calcium carbonate        |caco3       | % mass      |                                                  |
 | CEC at pH7               |cec7        | meq / 100g  | Cation Exchange Capacity (CEC) <2mm fraction     |
-| ECEC                     |            | meq / 100g  | Effective CEC                                    |
-| Soil organic carbon      |            | % mass      |                                                  |
-| Sodium Adsorption Ratio  |            | unitless    | Ratio of [Na]/([Ca]+[Mg]) in Saturated Paste     |
-| Electrical conductivity  |            | dS / m      | Saturated paste                                  |
+| ECEC                     |ecec        | meq / 100g  | Effective CEC                                    |
+| Soil organic carbon      |soc         | % mass      |                                                  |
+| Sodium Adsorption Ratio  |sar         | unitless    | Ratio of [Na]/([Ca]+[Mg]) in Saturated Paste     |
+| Electrical conductivity  |ec          | dS / m      | Saturated paste                                  |
 *New theme created from specified lithic or paralithic restrictions to estimate bedrock depth. 
 
 # Semi-detailed Structure of Project.
