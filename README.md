@@ -101,56 +101,6 @@ Models were created for point depths (as opposed to interval) at 0, 5, 15, 30, 6
 
 # Structure of DSMprops repository
 This repository is structured to include both an R package ([R](R/) and [man](man/) folders) and workflow documentation ([exec folder](exec/)). The R package portion includes common functions used extensively in workflows and includes cross-validation, spatial cross-validation, 
-weighting schemes, global uncertainty estimation, point extraction of raster values, and validation statistical summaries. 
+weighting schemes, global uncertainty estimation, point extraction of raster values, and validation statistical summaries. The workflow folder includes a number of subfolders with scripts documenting steps taken in preparing input data, building models, and houses other supporting files.
 
-<!-- create url links to each part when repo location is finalized -->
 
-## A. Pedon dataset cleaning and prep \[per property?\]
-
-### A.1 Forest Service NRM data \[Colby\]
-
-### A.2 NASIS point data
-
-### A.3 KSSL data
-
-### A.4 RaCA
-
-### A.5 Other point data
-
-## B. Depth Harmonization
-
-### (0-5, 5-15, 15-30, 30-60, 60-100, 100-200 cm) \[per property\]
-
-## C. Build Training Matrix
-
-### C.1 Extract DEM derivatives
-
-### C.2 Extract spectral derivatives
-
-### C.3 Extract other geospatial covariates
-
-## D. Build Models \[per property\]
-
-### D.1 Build list to hold each regional model per property \[big point of discussion here\]
-
-### D.2 Set up training routine (cross validation repeated 10 times or something).
-
-### D.3 Training/evaluation data split
-
-### D.4 Build continental model
-
-### D.5 Build regional models
-
-## E. Model Evaluation
-
-### E.1 Evalute continental model
-
-### E.2 Evaulate each regional model
-
-### E.3 Covariate importance
-
-## F. Spatial Predictions \[how to use regional models?\]
-
-## G. Spatial Uncertainty
-
-## H. Locations where the addition of legacy or new sample data would prove most beneficial to model improvement and/or uncertainty reduction.
