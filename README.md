@@ -12,6 +12,8 @@ and project executable scripts (exec folder) documenting current
 workflows for project implementation of digital soil mapping (DSM) models in the Soil Landscapes
 of the United States (SOLUS) 100m product.
 
+![alt text](https://github.com/naumi421/DSMprops/blob/main/exec/figs/FigX_MapExample.tif "SOLUS (a) and gNATSGO (b) maps of clay content at 5 cm with associated SOLUS sample density (c), upper (d) and lower (e) 95% prediction intervals (PIs) and relative prediction interval (RPI, f).")
+
 ## Installation
 
 You can install the released version of DSMprops from GitHub for R
