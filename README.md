@@ -9,7 +9,7 @@
 
 A hybrid repository including an R package for commonly used functions
 and project executable scripts (exec folder) documenting current
-workflows for project implementation of DSM models in the Soil Landscapes
+workflows for project implementation of digital soil mapping (DSM) models in the Soil Landscapes
 of the United States (SOLUS) 100m product.
 
 ## Installation
@@ -35,7 +35,7 @@ Cloning in bash:
 
 ``` bash
 $ cd /path/where/repo/goes
-$ git clone https://github.com/naumi421/DSMprops.git (or alternate repo URL)
+$ git clone https://github.com/naumi421/DSMprops.git #(or alternate repo URL)
 ```
 
 Rstudio also has options for cloning a repo with good guidance available
@@ -47,10 +47,10 @@ then be used in other sessions outside of the project.
 
 # Summary
 
-The aim is to provide code guidance for all steps of Unites States
-National Cooperative Soil Survey digital soil mapping workflows. We
-break these out by certain tasks needed to acheive the
-mapping.
+This repository documents specific steps used to create the SOLUS100 dataset. The focus of the SOLUS100m development team
+was to better utilize various parts of the National Cooperative Soil Survey (NCSS) datasets to inform digital soil mapping of useful
+soil properties. Data from the Kellog Soil Survey Laboratory National Soil Characterization Database (SCD), field classified pedons
+from the NCSS program, and gNATSGO were all utilized in a hybrid training set to increase model inference. Previous 
 
 ## Properties included in SOLUS100 dataset
 
@@ -68,7 +68,7 @@ mapping.
 | Depth to restriction     |resdept     | cm          | Depth to layer that limits air, water, or roots  |
 | pH                       |ph1to1h2o   | -log[H+]    | 1:1 method                                       |
 | Rock fragments           |fragvol     | % vol.      | Particles >2mm, whole soil basis                 |
-| Bulk Density             |dbovendry   | g cm<sup>-3</sup> | Oven Dry                                   |
+| Bulk Density             |dbovendry   | g cm<sup>-3</sup> | Oven dry bulk density                      |
 | Calcium carbonate        |caco3       | % mass      |                                                  |
 | CEC at pH7               |cec7        | meq / 100g  | Cation Exchange Capacity (CEC) <2mm fraction     |
 | ECEC                     |ecec        | meq / 100g  | Effective CEC                                    |
