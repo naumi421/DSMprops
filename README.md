@@ -64,7 +64,7 @@ mapping.
 | Medium sand              |sandmed     | % mass      |                                                  |
 | Coarse sand              |sandco      | % mass      |                                                  |
 | Very coarse sand         |sandvc      | % mass      |                                                  |
-| Depth to bedrock         |anylithicdpt*| cm          | Depth to lithic of paralithic contact            |
+| Depth to bedrock         |anylithicdpt*| cm         | Depth to lithic of paralithic contact            |
 | Depth to restriction     |resdept     | cm          | Depth to layer that limits air, water, or roots  |
 | pH                       |            | -log[H+]    | 1:1 method                                       |
 | Rock fragments           |            | % vol.      | Particles >2mm, whole soil basis                 |
@@ -75,7 +75,7 @@ mapping.
 | Soil organic carbon      |            | % mass      |                                                  |
 | Sodium Adsorption Ratio  |            | unitless    | Ratio of [Na]/([Ca]+[Mg]) in Saturated Paste     |
 | Electrical conductivity  |            | dS / m      | Saturated paste                                  |
-
+*New theme created from specified lithic or paralithic restrictions to estimate bedrock depth. 
 
 # Semi-detailed Structure of Project.
 
