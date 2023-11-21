@@ -56,6 +56,7 @@ from the NCSS program, and gNATSGO were all utilized in a hybrid training set to
 ~10-15x relative to other efforts to predict soil properties across the conterminous United States (CONUS).
 
 Please see the associated publication for further details on methods and performance of models:
+
 Nauman, T.W., Kienast-Brown, S, White, D., Brungard, C, Roecker, S, Philippe, J., Thompson, J.A. Soil Landscapes of the United States (SOLUS): developing predictive soil property maps of the conterminous US using hybrid training sets.
 In Preparation for submission to Soil Science Society of America Journal.
 
