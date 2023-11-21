@@ -34,7 +34,7 @@ Cloning in bash:
 
 ``` bash
 $ cd /path/where/repo/goes
-$ git clone https://github.com/naumi421/DSMprops.git
+$ git clone https://github.com/naumi421/DSMprops.git (or alternate repo URL)
 ```
 
 Rstudio also has options for cloning a repo with good guidance available
@@ -51,7 +51,7 @@ National Cooperative Soil Survey digital soil mapping workflows. We
 break these out by certain tasks needed to acheive the
 mapping.
 
-## The properties we plan to map
+## Properties included in SOLUS100 dataset
 
 | Property                 | Units       | Notes                                            |
 | ------------------------ | ----------- | ------------------------------------------------ |
@@ -60,8 +60,8 @@ mapping.
 | Silt                     | % mass   |                                                  |
 | Depth                    | cm          |                                                  |
 | pH                       | -log[H+]    |                                                  |
-| rock fragments           | (m3 m-3)    |                                                  |
-| Available water capacity | (mm mm-1 ?) | probably need to run Rosetta or Saxton and Rawls |
+| rock fragments           | % vol.    |                                                  |
+| Bulk Density | g cm^-3^ | Oven Dry |
 
 # Potential properties to be predicted
 
