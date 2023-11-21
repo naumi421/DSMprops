@@ -90,15 +90,17 @@ standards. These properties are listed in the table below, but more detailed des
 *New theme created from specified lithic or paralithic restrictions to estimate bedrock depth. 
 
 # General Workflow for SOLUS100
-![alt text](https://github.com/naumi421/DSMprops/blob/main/exec/figs/Fig1_Workflow_png.png "Process workflow for selecting training data, model building, and model performance assessment..")
+![alt text](exec/figs/Fig1_Workflow_png.png "Process workflow for selecting training data, model building, and model performance assessment..")
 SOLUS100 process workflow for selecting training data, model building, and model performance assessment.
 
 SOLUS100 combines several different types of training data to increaase model inference. A selection process was used to ensure that inclusion of new tiers of data did not degrade model quality. 
 This included both incrementally adding different types and ages of data. Both source of data and uncertainty of geolocation information were assessed in a data grid test of adding progressively 
 more data to models starting with the highest quality and incrementally adding data with more and more uncertainty. Both out-of-bag R<sup>2</sup> and a global uncertainty summery (mean relative prediction interval) 
-were used to rank models with various combinations of training data to select the optimal tiers of training data. Random forest models were fit for every property at every depth in this fashion.  
+were used to rank models with various combinations of training data to select the optimal tiers of training data. Random forest models were fit for every property at every depth in this fashion.
+Models were created for point depths (as opposed to interval) at 0, 5, 15, 30, 60, 100, and 150 cm excepting soil depth to restriction and bedrock.
 
 # Structure of DSMprops repository
+This repository is structured to include both an R package and workflow documentation. The R package portion is included in the 
 
 <!-- create url links to each part when repo location is finalized -->
 
