@@ -206,7 +206,7 @@ x <- seq(0,60)
 xec <- scd.pts.satpmod$ec_12pre
 yec <- scd.pts.satpmod$ec_satp
 # b1 <- gam(ygamexh~s(xgamexh), method="REML",select=TRUE)
-b1 <- lm(yec~xec)
+b1 <- lm(yec~xec) # ec_satp = 2.5808(ec_12pre) - 0.026, Adj Rsq = 0.625, p < 2.2e-16
 y <- predict(b1, data.frame(xec = x))
 plot(yec~xec, ylim = c(0,10), xlim = c(0,2.5), xlab = "1:2 EC", ylab = "Sat. Paste EC")
 lines(x,y, col="red")
