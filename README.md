@@ -52,7 +52,12 @@ then be used in other sessions outside of the project.
 This repository documents specific steps used to create the SOLUS100 dataset. The focus of the SOLUS100m development team
 was to better utilize various parts of the National Cooperative Soil Survey (NCSS) datasets to inform digital soil mapping of useful
 soil properties. Data from the Kellog Soil Survey Laboratory National Soil Characterization Database (SCD), field classified pedons
-from the NCSS program, and gNATSGO were all utilized in a hybrid training set to increase model inference. Previous 
+from the NCSS program, and gNATSGO were all utilized in a hybrid training set to increase model inference. This increases sample size by 
+~10-15x relative to other efforts to predict soil properties across the conterminous United States (CONUS).
+
+Please see the associated publication for further details on methods and performance of models:
+Nauman, T.W., Kienast-Brown, S, White, D., Brungard, C, Roecker, S, Philippe, J., Thompson, J.A. Soil Landscapes of the United States (SOLUS): developing predictive soil property maps of the conterminous US using hybrid training sets.
+In Preparation for submission to Soil Science Society of America Journal.
 
 ## Properties included in SOLUS100 dataset
 
@@ -79,6 +84,9 @@ from the NCSS program, and gNATSGO were all utilized in a hybrid training set to
 | Electrical conductivity  |ec          | dS / m      | Saturated paste                                  |
 
 *New theme created from specified lithic or paralithic restrictions to estimate bedrock depth. 
+
+# General Workflow for SOLUS100
+
 
 # Semi-detailed Structure of Project.
 
