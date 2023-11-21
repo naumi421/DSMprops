@@ -61,6 +61,8 @@ Nauman, T.W., Kienast-Brown, S, White, D., Brungard, C, Roecker, S, Philippe, J.
 In Preparation for submission to Soil Science Society of America Journal.
 
 ## Properties included in SOLUS100 dataset
+Twenty differnt soil properties were mapped for SOLUS100. All properties were defined consistently with U.S. Soil Survey Geographic Database (SSURGO)
+standards. These properties are listed in the table below, but more detailed descriptions can be found in SSURGO documentation.
 
 | Property                 |SSURGO code | Units       | Notes                                            |
 | ------------------------ | ---------- | ----------- | ------------------------------------------------ |
@@ -78,6 +80,7 @@ In Preparation for submission to Soil Science Society of America Journal.
 | Rock fragments           |fragvol     | % vol.      | Particles >2mm, whole soil basis                 |
 | Bulk Density             |dbovendry   | g cm<sup>-3</sup> | Oven dry bulk density                      |
 | Calcium carbonate        |caco3       | % mass      |                                                  |
+| Gypsum                   |gypsum      | % mass      |                                                  |
 | CEC at pH7               |cec7        | meq / 100g  | Cation Exchange Capacity (CEC) <2mm fraction     |
 | ECEC                     |ecec        | meq / 100g  | Effective CEC                                    |
 | Soil organic carbon      |soc         | % mass      |                                                  |
