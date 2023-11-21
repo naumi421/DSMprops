@@ -90,6 +90,11 @@ In Preparation for submission to Soil Science Society of America Journal.
 ![alt text](https://github.com/naumi421/DSMprops/blob/main/exec/figs/Fig1_Workflow_png.png "Process workflow for selecting training data, model building, and model performance assessment..")
 SOLUS100 process workflow for selecting training data, model building, and model performance assessment.
 
+SOLUS100 combines several different types of training data to increaase model inference. A selection process was used to ensure that inclusion of new tiers of data did not degrade model quality. 
+This included both incrementally adding different types and ages of data. Both source of data and uncertainty of geolocation information were assessed in a data grid test of adding progressively 
+more data to models starting with the highest quality and incrementally adding data with more and more uncertainty. Both out-of-bag R<sup>2</sup> and a global uncertainty summery (mean relative prediction interval) 
+were used to rank models with various combinations of training data to select the optimal tiers of training data. Random forest models were fit for every property at every depth in this fashion.  
+
 # Semi-detailed Structure of Project.
 
 <!-- create url links to each part when repo location is finalized -->
