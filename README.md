@@ -100,7 +100,8 @@ were used to rank models with various combinations of training data to select th
 Models were created for point depths (as opposed to interval) at 0, 5, 15, 30, 60, 100, and 150 cm excepting soil depth to restriction and bedrock.
 
 # Structure of DSMprops repository
-This repository is structured to include both an R package and workflow documentation. The R package portion is included in the 
+This repository is structured to include both an R package (R and man folders) and workflow documentation ([exec folder](exec/)). The R package portion includes common functions used extensively in workflows and includes cross-validation, spatial cross-validation, 
+weighting schemes, global uncertainty estimation, point extraction of raster values, and validation statistical summaries. 
 
 <!-- create url links to each part when repo location is finalized -->
 
