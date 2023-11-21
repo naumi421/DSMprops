@@ -45,7 +45,7 @@ Once repository has been cloned. Open the R project in Rstudio and use
 *Build \> Install and Restart* to install DSMprops package which can
 then be used in other sessions outside of the project.
 
-# DSMprops project overview:
+# Summary
 
 The aim is to provide code guidance for all steps of Unites States
 National Cooperative Soil Survey digital soil mapping workflows. We
@@ -54,27 +54,27 @@ mapping.
 
 ## Properties included in SOLUS100 dataset
 
-| Property                 | Units       | Notes                                            |
-| ------------------------ | ----------- | ------------------------------------------------ |
-| Clay                     | % mass      |                                                  |
-| Silt                     | % mass      |                                                  |
-| Sand                     | % mass      |                                                  |
-| Very fine sand           | % mass      |                                                  |
-| Fine sand                | % mass      |                                                  |
-| Medium sand              | % mass      |                                                  |
-| Coarse sand              | % mass      |                                                  |
-| Very coarse sand         | % mass      |                                                  |
-| Depth to bedrock         | cm          | Depth to lithic of paralithic contact            |
-| Depth to restriction     | cm          | Depth to layer that limits air, water, or roots  |
-| pH                       | -log[H+]    | 1:1 method                                       |
-| Rock fragments           | % vol.      | Particles >2mm, whole soil basis                 |
-| Bulk Density             | g cm<sup>-3</sup> | Oven Dry                                   |
-| Calcium carbonate        | % mass      |                                                  |
-| CEC at pH7               | meq / 100g  | Cation Exchange Capacity (CEC) <2mm fraction     |
-| ECEC                     | meq / 100g  | Effective CEC                                    |
-| Soil organic carbon      | % mass      |                                                  |
-| Sodium Adsorption Ratio  | unitless    | Ratio of [Na]/([Ca]+[Mg]) in Saturated Paste     |
-| Electrical conductivity  | dS / m      | Saturated paste                                  |
+| Property                 |SSURGO code | Units       | Notes                                            |
+| ------------------------ | ---------- | ----------- | ------------------------------------------------ |
+| Clay                     |            | % mass      |                                                  |
+| Silt                     |            | % mass      |                                                  |
+| Sand                     |            | % mass      |                                                  |
+| Very fine sand           |            | % mass      |                                                  |
+| Fine sand                |            | % mass      |                                                  |
+| Medium sand              |            | % mass      |                                                  |
+| Coarse sand              |            | % mass      |                                                  |
+| Very coarse sand         |            | % mass      |                                                  |
+| Depth to bedrock         |            | cm          | Depth to lithic of paralithic contact            |
+| Depth to restriction     |            | cm          | Depth to layer that limits air, water, or roots  |
+| pH                       |            | -log[H+]    | 1:1 method                                       |
+| Rock fragments           |            | % vol.      | Particles >2mm, whole soil basis                 |
+| Bulk Density             |dbovendry   | g cm<sup>-3</sup> | Oven Dry                                   |
+| Calcium carbonate        |            | % mass      |                                                  |
+| CEC at pH7               |            | meq / 100g  | Cation Exchange Capacity (CEC) <2mm fraction     |
+| ECEC                     |            | meq / 100g  | Effective CEC                                    |
+| Soil organic carbon      |            | % mass      |                                                  |
+| Sodium Adsorption Ratio  |            | unitless    | Ratio of [Na]/([Ca]+[Mg]) in Saturated Paste     |
+| Electrical conductivity  |            | dS / m      | Saturated paste                                  |
 
 
 # Semi-detailed Structure of Project.
