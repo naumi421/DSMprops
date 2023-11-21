@@ -55,11 +55,11 @@ mapping.
 
 | Property                 | Units       | Notes                                            |
 | ------------------------ | ----------- | ------------------------------------------------ |
-| Clay                     | g/kg or %   |                                                  |
-| Sand                     | g/kg or %   |                                                  |
-| Silt                     | g/kg or %   |                                                  |
+| Clay                     | % mass   |                                                  |
+| Sand                     | % mass   |                                                  |
+| Silt                     | % mass   |                                                  |
 | Depth                    | cm          |                                                  |
-| pH                       | unitless    |                                                  |
+| pH                       | -log[H+]    |                                                  |
 | rock fragments           | (m3 m-3)    |                                                  |
 | Available water capacity | (mm mm-1 ?) | probably need to run Rosetta or Saxton and Rawls |
 
