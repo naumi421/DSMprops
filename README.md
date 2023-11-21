@@ -8,7 +8,7 @@
 <!-- badges: end -->
 
 A hybrid repository including an R package for commonly used functions
-and project executable scripts (exec folder) documenting current
+and project executable scripts documenting current
 workflows for project implementation of digital soil mapping (DSM) models in the Soil Landscapes
 of the United States 100m product (SOLUS100).
 
