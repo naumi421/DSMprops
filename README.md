@@ -9,7 +9,8 @@
 
 A hybrid repository including an R package for commonly used functions
 and project executable scripts (exec folder) documenting current
-workflows for project implementation of DSM models.
+workflows for project implementation of DSM models in the Soil Landscapes
+of the United States (SOLUS) 100m product.
 
 ## Installation
 
@@ -55,13 +56,19 @@ mapping.
 
 | Property                 | Units       | Notes                                            |
 | ------------------------ | ----------- | ------------------------------------------------ |
-| Clay                     | % mass   |                                                  |
-| Sand                     | % mass   |                                                  |
-| Silt                     | % mass   |                                                  |
-| Depth                    | cm          |                                                  |
-| pH                       | -log[H+]    |                                                  |
-| rock fragments           | % vol.    |                                                  |
-| Bulk Density | g cm<sup>-3</sup> | Oven Dry |
+| Clay                     | % mass      | <2mm fraction                                    |
+| Sand                     | % mass      | <2mm fraction                                    |
+| Silt                     | % mass      | <2mm fraction                                    |
+| Depth                    | cm          | Depth to lithic of paralithic contact            |
+| pH                       | -log[H+]    | 1:1 method, <2mm fraction                        |
+| rock fragments           | % vol.      |  Whole soil basis                                |
+| Bulk Density             | g cm<sup>-3</sup> | Oven Dry                                   |
+| Calcium carbonate        | % mass      | <2mm fraction                                    |
+| CEC at pH7               | meq / 100g  | <2mm fraction                                    |
+| ECEC                     | meq / 100g  | <2mm fraction                                    |
+| N                       | (%)        |       |
+| C                       | (%)        |       |
+| electrical conductivity | (dS/m)     |       |
 
 # Potential properties to be predicted
 
