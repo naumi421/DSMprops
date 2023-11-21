@@ -98,7 +98,7 @@ This included both incrementally adding different types and ages of data. Both s
 more data to models starting with the highest quality and incrementally adding data with more and more uncertainty. Both out-of-bag R<sup>2</sup> and a global uncertainty summery (mean relative prediction interval) 
 were used to rank models with various combinations of training data to select the optimal tiers of training data. Random forest models were fit for every property at every depth in this fashion.  
 
-# Semi-detailed Structure of Project.
+# Structure of DSMprops repository
 
 <!-- create url links to each part when repo location is finalized -->
 
