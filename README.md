@@ -56,28 +56,26 @@ mapping.
 
 | Property                 | Units       | Notes                                            |
 | ------------------------ | ----------- | ------------------------------------------------ |
-| Clay                     | % mass      | <2mm fraction                                    |
-| Sand                     | % mass      | <2mm fraction                                    |
-| Silt                     | % mass      | <2mm fraction                                    |
-| Depth                    | cm          | Depth to lithic of paralithic contact            |
-| pH                       | -log[H+]    | 1:1 method, <2mm fraction                        |
-| rock fragments           | % vol.      |  Whole soil basis                                |
+| Clay                     | % mass      |                                                  |
+| Silt                     | % mass      |                                                  |
+| Sand                     | % mass      |                                                  |
+| Very fine sand           | % mass      |                                                  |
+| Fine sand                | % mass      |                                                  |
+| Medium sand              | % mass      |                                                  |
+| Coarse sand              | % mass      |                                                  |
+| Very coarse sand         | % mass      |                                                  |
+| Depth to bedrock         | cm          | Depth to lithic of paralithic contact            |
+| Depth to restriction     | cm          | Depth to layer that limits air, water, or roots  |
+| pH                       | -log[H+]    | 1:1 method                                       |
+| Rock fragments           | % vol.      | Particles >2mm, whole soil basis                 |
 | Bulk Density             | g cm<sup>-3</sup> | Oven Dry                                   |
-| Calcium carbonate        | % mass      | <2mm fraction                                    |
-| CEC at pH7               | meq / 100g  | <2mm fraction                                    |
-| ECEC                     | meq / 100g  | <2mm fraction                                    |
-| N                       | (%)        |       |
-| C                       | (%)        |       |
-| electrical conductivity | (dS/m)     |       |
+| Calcium carbonate        | % mass      |                                                  |
+| CEC at pH7               | meq / 100g  | Cation Exchange Capacity (CEC) <2mm fraction     |
+| ECEC                     | meq / 100g  | Effective CEC                                    |
+| Soil organic carbon      | % mass      |                                                  |
+| Sodium Adsorption Ratio  | unitless    | Ratio of [Na]/([Ca]+[Mg]) in Saturated Paste     |
+| Electrical conductivity  | dS / m      | Saturated paste                                  |
 
-# Potential properties to be predicted
-
-| Property                | Units      | Notes |
-| ----------------------- | ---------- | ----- |
-| ECEC                    | (cmolc/kg) |       |
-| N                       | (%)        |       |
-| C                       | (%)        |       |
-| electrical conductivity | (dS/m)     |       |
 
 # Semi-detailed Structure of Project.
 
