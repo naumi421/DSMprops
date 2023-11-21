@@ -52,7 +52,7 @@ then be used in other sessions outside of the project.
 This repository documents specific steps used to create the SOLUS100 dataset. The focus of the SOLUS100m development team
 was to better utilize various parts of the National Cooperative Soil Survey (NCSS) datasets to inform digital soil mapping of useful
 soil properties. Data from the Kellog Soil Survey Laboratory National Soil Characterization Database (SCD), field classified pedons
-from the NCSS National Soil Information System (NASIS) catalogues from previous soil survey efforts, and the Gridded National Soil 
+from the NCSS National Soil Information System (NASIS) catalogued from previous soil survey efforts, and the Gridded National Soil 
 Survey Geographic Database (gNATSGO) were all utilized in a hybrid training set to increase model inference. This increases sample size by 
 ~10-15x relative to other efforts to predict soil properties across the conterminous United States (CONUS).
 
