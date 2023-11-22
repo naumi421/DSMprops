@@ -1,0 +1,98 @@
+---
+title: "Do sand silt and clay sum to 100?"
+output: html_notebook
+---
+
+
+a. Stack variables for each depth increment. 
+Load variables
+```{r}
+library(terra)
+
+# Clay
+cl0   <- rast("Z:/vf/WaterRetentionDifference/Clay_gRPI_250k/claytotal_r_1x_0_cm_2D_QRFadj.tif")
+cl5   <- rast("Z:/vf/WaterRetentionDifference/Clay_gRPI_250k/claytotal_r_1x_5_cm_2D_QRFadj.tif")  
+cl15  <- rast("Z:/vf/WaterRetentionDifference/Clay_gRPI_250k/claytotal_r_1x_15_cm_2D_QRFadj.tif")
+cl30  <- rast("Z:/vf/WaterRetentionDifference/Clay_gRPI_250k/claytotal_r_1x_30_cm_2D_QRFadj.tif")
+cl60  <- rast("Z:/vf/WaterRetentionDifference/Clay_gRPI_250k/claytotal_r_1x_60_cm_2D_QRFadj.tif")
+cl100 <- rast("Z:/vf/WaterRetentionDifference/Clay_gRPI_250k/claytotal_r_1x_100_cm_2D_QRFadj.tif")
+cl150 <- rast("Z:/vf/WaterRetentionDifference/Clay_gRPI_250k/claytotal_r_1x_150_cm_2D_QRFadj.tif")
+
+# Sand
+s0   <- rast("Z:/vf/WaterRetentionDifference/Sand_gRPI_250k/sandtotal_r_1x_0_cm_2D_QRFadj.tif")
+s5   <- rast("Z:/vf/WaterRetentionDifference/Sand_gRPI_250k/sandtotal_r_1x_5_cm_2D_QRFadj.tif")  
+s15  <- rast("Z:/vf/WaterRetentionDifference/Sand_gRPI_250k/sandtotal_r_1x_15_cm_2D_QRFadj.tif")
+s30  <- rast("Z:/vf/WaterRetentionDifference/Sand_gRPI_250k/sandtotal_r_1x_30_cm_2D_QRFadj.tif")
+s60  <- rast("Z:/vf/WaterRetentionDifference/Sand_gRPI_250k/sandtotal_r_1x_60_cm_2D_QRFadj.tif")
+s100 <- rast("Z:/vf/WaterRetentionDifference/Sand_gRPI_250k/sandtotal_r_1x_100_cm_2D_QRFadj.tif")
+s150 <- rast("Z:/vf/WaterRetentionDifference/Sand_gRPI_250k/sandtotal_r_1x_150_cm_2D_QRFadj.tif")
+
+# Silt
+si0   <- rast("Z:/vf/WaterRetentionDifference/Silt_gRPI_250k/silttotal_r_1x_0_cm_2D_QRFadj.tif")
+si5   <- rast("Z:/vf/WaterRetentionDifference/Silt_gRPI_250k/silttotal_r_1x_5_cm_2D_QRFadj.tif")  
+si15  <- rast("Z:/vf/WaterRetentionDifference/Silt_gRPI_250k/silttotal_r_1x_15_cm_2D_QRFadj.tif")
+si30  <- rast("Z:/vf/WaterRetentionDifference/Silt_gRPI_250k/silttotal_r_1x_30_cm_2D_QRFadj.tif")
+si60  <- rast("Z:/vf/WaterRetentionDifference/Silt_gRPI_250k/silttotal_r_1x_60_cm_2D_QRFadj.tif")
+si100 <- rast("Z:/vf/WaterRetentionDifference/Silt_gRPI_250k/silttotal_r_1x_100_cm_2D_QRFadj.tif")
+si150 <- rast("Z:/vf/WaterRetentionDifference/Silt_gRPI_250k/silttotal_r_1x_150_cm_2D_QRFadj.tif")
+```
+
+Sum each depth increment
+```{r}
+ssc0 <- c(s0, si0, cl0)
+names(ssc0) <- c('sand', 'silt', 'clay')
+sum0 <- sum(ssc0)
+writeRaster(sum0, "Z:/vf/sum0.tif")
+
+ssc5 <- c(s5, si5, cl5)
+names(ssc5) <- c('sand', 'silt', 'clay')
+sum5 <- sum(ssc5)
+writeRaster(sum5, "Z:/vf/sum5.tif")
+
+ssc15 <- c(s15, si15, cl15)
+names(ssc15) <- c('sand', 'silt', 'clay')
+sum15 <- sum(ssc15)
+writeRaster(sum15, "Z:/vf/sum15.tif")
+
+ssc30 <- c(s30, si30, cl30)
+names(ssc30) <- c('sand', 'silt', 'clay')
+sum30 <- sum(ssc30)
+writeRaster(sum30, "Z:/vf/sum30.tif")
+
+ssc60 <- c(s60, si60, cl60)
+names(ssc60) <- c('sand', 'silt', 'clay')
+sum60 <- sum(ssc60)
+writeRaster(sum60, "Z:/vf/sum60.tif")
+
+ssc100 <- c(s100, si100, cl100)
+names(ssc100) <- c('sand', 'silt', 'clay')
+sum100 <- sum(ssc100)
+writeRaster(sum100, "Z:/vf/sum100.tif")
+
+ssc150 <- c(s150, si150, cl150)
+names(ssc150) <- c('sand', 'silt', 'clay')
+sum150 <- sum(ssc150)
+writeRaster(sum150, "Z:/vf/sum150.tif")
+```
+
+
+Normalize predictions to 100% to fix problems
+```{r}
+terraOptions(memfrac=0.9, progress=2)
+divide_by_sum <- function(vector) {
+  # no values sum to 0 (and few that sum to exactly 100), but this is how a check could be incorporated
+  #if (sum(vector) == 0) {
+    #stop("Sum of the vector is zero. Division by zero is not allowed.")
+  #}
+  return((vector / sum(vector))*100)
+}
+
+app(ssc0, divide_by_sum, cores=8, filename= "Z:/vf/sum0_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc5, divide_by_sum, cores=8, filename= "Z:/vf/sum5_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc15, divide_by_sum, cores=8, filename= "Z:/vf/sum15_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc30, divide_by_sum, cores=8, filename= "Z:/vf/sum30_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc60, divide_by_sum, cores=8, filename= "Z:/vf/sum60_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc100, divide_by_sum, cores=8, filename= "Z:/vf/sum100_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc150, divide_by_sum, cores=8, filename= "Z:/vf/sum150_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+
+```
