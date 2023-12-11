@@ -81,22 +81,73 @@ writeRaster(sum150, "/mnt/disks/sped/ssc_sum/sum150.tif")
 
 Normalize predictions to 100% to fix problems
 ```{r}
-terraOptions(memfrac=0.9, progress=2)
+#terraOptions(memfrac=0.9, progress=2)
 divide_by_sum <- function(vector) {
   # no values sum to 0 (and few that sum to exactly 100), but this is how a check could be incorporated
   #if (sum(vector) == 0) {
     #stop("Sum of the vector is zero. Division by zero is not allowed.")
   #}
-  v = vector / sum(vector)*100
-  return(round(v, 0))
+  v <- vector / sum(vector)*100
+  v2 <- round(v, 0) 
+  ## rounding creates occasional sums greater than 100
+  ## Errant values are either 99 or 101, so we are correcting by subtracting 1 from
+  ## the texture class with the max value for 101 pixels, or adding 1 to the minimum 
+  ## texture fraction for sums of 99
+  # Create rasters showing where errors are
+  sumv2 <- sum(v2)
+  sumv2_101 <- sumv2
+  sumv2_101[sumv2_101 < 101] <- 0
+  sumv2_101[sumv2_101 > 100] <- 1
+  sumv2_99 <- sumv2
+  sumv2_99[sumv2_99 < 99 | sumv2_99 > 99] <- 0
+  sumv2_99[sumv2_99 == 99] <- 1
+  ## Reference which fraction is max and min in stacks
+  maxv2 <- which.max(v2)
+  minv2 <- which.min(v2)
+  # maxv2 <- terra::app(v2, which.max)
+  # minv2 <- terra::app(v2, which.min)
+  ## Create rasters for where clay values should be modified
+  claymax <- maxv2
+  claymax[claymax < 3] <- 0
+  claymax[claymax == 3] <- 1
+  claymax <- claymax * sumv2_101
+  claymin <- minv2
+  claymin[claymin < 3] <- 0
+  claymin[claymin == 3] <- 1
+  claymin <- claymin * sumv2_99
+  ## Create rasters for where silt values should be modified
+  siltmax <- maxv2
+  siltmax[siltmax < 2 | siltmax > 2] <- 0
+  siltmax[siltmax == 2] <- 1
+  siltmax <- siltmax * sumv2_101
+  siltmin <- minv2
+  siltmin[siltmin < 2 | siltmin > 2] <- 0
+  siltmin[siltmin == 2] <- 1
+  siltmin <- siltmin * sumv2_99
+  ## Create rasters for where sand values should be modified
+  sandmax <- maxv2
+  sandmax[sandmax > 1] <- 0
+  sandmax <- sandmax * sumv2_101
+  sandmin <- minv2
+  sandmin[sandmin > 1] <- 0
+  sandmin <- sandmin * sumv2_99
+  ## Modify the original rasters
+  v2[["clay"]] <- v2[["clay"]]+claymin
+  v2[["clay"]] <- v2[["clay"]]-claymax
+  v2[["silt"]] <- v2[["silt"]]+siltmin
+  v2[["silt"]] <- v2[["silt"]]-siltmax
+  v2[["sand"]] <- v2[["sand"]]+sandmin
+  v2[["sand"]] <- v2[["sand"]]-sandmax
+  return(v2)
 }
 
-app(ssc0, divide_by_sum, cores=30, filename= "/mnt/disks/sped/ssc_sum/sum0_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc5, divide_by_sum, cores=30, filename= "/mnt/disks/sped/ssc_sum/sum5_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc15, divide_by_sum, cores=30, filename= "/mnt/disks/sped/ssc_sum/sum15_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc30, divide_by_sum, cores=30, filename= "/mnt/disks/sped/ssc_sum/sum30_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc60, divide_by_sum, cores=30, filename= "/mnt/disks/sped/ssc_sum/sum60_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc100, divide_by_sum, cores=30, filename= "/mnt/disks/sped/ssc_sum/sum100_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc150, divide_by_sum, cores=30, filename= "/mnt/disks/sped/ssc_sum/sum150_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc0, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum0_fix.tif",
+    overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc5, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum5_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc15, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum15_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc30, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum30_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc60, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum60_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc100, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum100_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+app(ssc150, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum150_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
 
 ```
