@@ -41,12 +41,12 @@ sumeval_fn <- function(d){
   model <- paste0("clay ",gsub("_","",d), " cm")
   viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
   scaleFUN <- function(x) round(x,0)
-  # plot1to1 <- ggplot(data=as.data.frame(pts_spatvect), aes(prop, clay)) +
-  #   stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
-  #   theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
-  #   xlab("Measured") + ylab("Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
-  #   ggtitle(paste0("Sum fix ", "clay ", gsub("_","",d), " cm"))
-  # ggsave(paste(datafldr,'/1to1plot_',"clay",'_',gsub("_","",d),'_cm.tif',sep=""), plot = plot1to1, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
+  plot1to1 <- ggplot(data=as.data.frame(pts_spatvect), aes(prop, clay)) +
+    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
+    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
+    xlab("Measured") + ylab("Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
+    ggtitle(paste0("Sum fix ", "clay ", gsub("_","",d), " cm"))
+  ggsave(paste(datafldr,'/1to1plot_',"clay",'_',gsub("_","",d),'_cm.tif',sep=""), plot = plot1to1, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
   Rsq <- 1-var(pts_spatvect$prop_t - pts_spatvect$clay, na.rm=TRUE)/var(pts_spatvect$prop_t, na.rm=TRUE)
   RMSE <- sqrt(mean((pts_spatvect$prop - pts_spatvect$clay)^2, na.rm=TRUE))
   n <- nrow(as.data.frame(pts_spatvect))
@@ -81,14 +81,14 @@ sumeval_fn2 <- function(d){
   pts_spatvect <- terra::extract(r_fix, pts_spatvect, bind=T)
   model <- paste0("sand ",gsub("_","",d), " cm")
   viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
-  # scaleFUN <- function(x) round(x,0)
-  # plot1to1 <- ggplot(data=as.data.frame(pts_spatvect[pts_spatvect$sum < 80,]), aes(prop, sand)) +
-  #   stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
-  #   theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
-  #   xlab("Measured") + ylab("Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
-  #   ggtitle(paste0("Sum fix ", "sand ", gsub("_","",d), " cm"))
-  # plot1to1
-  # ggsave(paste(datafldr,'/1to1plot_',"sand",'_',gsub("_","",d),'_cm.tif',sep=""), plot = plot1to1, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
+  scaleFUN <- function(x) round(x,0)
+  plot1to1 <- ggplot(data=as.data.frame(pts_spatvect[pts_spatvect$sum < 80,]), aes(prop, sand)) +
+    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
+    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
+    xlab("Measured") + ylab("Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
+    ggtitle(paste0("Sum fix ", "sand ", gsub("_","",d), " cm"))
+  plot1to1
+  ggsave(paste(datafldr,'/1to1plot_',"sand",'_',gsub("_","",d),'_cm.tif',sep=""), plot = plot1to1, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
   Rsq <- 1-var(pts_spatvect$prop_t - pts_spatvect$sand, na.rm=TRUE)/var(pts_spatvect$prop_t, na.rm=TRUE)
   RMSE <- sqrt(mean((pts_spatvect$prop - pts_spatvect$sand)^2, na.rm=TRUE))
   n <- nrow(as.data.frame(pts_spatvect))
@@ -124,12 +124,12 @@ sumeval_fn3 <- function(d){
   model <- paste0("silt ",gsub("_","",d), " cm")
   viri <- c("#440154FF", "#39568CFF", "#1F968BFF", "#73D055FF", "#FDE725FF") # color ramp
   scaleFUN <- function(x) round(x,0)
-  # plot1to1 <- ggplot(data=as.data.frame(pts_spatvect), aes(prop, silt)) +
-  #   stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
-  #   theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
-  #   xlab("Measured") + ylab("Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
-  #   ggtitle(paste0("Sum fix ", "silt ", gsub("_","",d), " cm"))
-  # ggsave(paste(datafldr,'/1to1plot_',"silt",'_',gsub("_","",d),'_cm.tif',sep=""), plot = plot1to1, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
+  plot1to1 <- ggplot(data=as.data.frame(pts_spatvect), aes(prop, silt)) +
+    stat_binhex(bins = 30) + geom_abline(intercept = 0, slope = 1,lwd=1) + #xlim(-5,105) + ylim(-5,105) +
+    theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
+    xlab("Measured") + ylab("Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
+    ggtitle(paste0("Sum fix ", "silt ", gsub("_","",d), " cm"))
+  ggsave(paste(datafldr,'/1to1plot_',"silt",'_',gsub("_","",d),'_cm.tif',sep=""), plot = plot1to1, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
   Rsq <- 1-var(pts_spatvect$prop_t - pts_spatvect$silt, na.rm=TRUE)/var(pts_spatvect$prop_t, na.rm=TRUE)
   RMSE <- sqrt(mean((pts_spatvect$prop - pts_spatvect$silt)^2, na.rm=TRUE))
   n <- nrow(as.data.frame(pts_spatvect))
