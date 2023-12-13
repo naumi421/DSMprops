@@ -11,10 +11,14 @@ Originally from Colby Brungard, ~11/5/2023
 Modified 12/8/2023 by T. Nauman to incorporate fixes to rounding errors
 ```{r}
 library(terra)
+library(parallel)
+library(doParallel)
 
 # Clay
+clayfiles <- list.files(path = "/mnt/disks/sped/ssc_sum/orig_preds",pattern="claytotal",full.names = T, recursive = F)
+clayfiles <- clayfiles[grepl(".tif",clayfiles)]
 cl0   <- rast("/mnt/disks/sped/ssc_sum/orig_preds/claytotal_r_1x_0_cm_2D_QRFadj.tif")
-cl5   <- rast("/mnt/disks/sped/ssc_sum/orig_preds/claytotal_r_1x_5_cm_2D_QRFadj.tif")  
+cl5   <- rast("/mnt/disks/sped/ssc_sum/orig_preds/claytotal_r_1x_5_cm_2D_QRFadj.tif")
 cl15  <- rast("/mnt/disks/sped/ssc_sum/orig_preds/claytotal_r_1x_15_cm_2D_QRFadj.tif")
 cl30  <- rast("/mnt/disks/sped/ssc_sum/orig_preds/claytotal_r_1x_30_cm_2D_QRFadj.tif")
 cl60  <- rast("/mnt/disks/sped/ssc_sum/orig_preds/claytotal_r_1x_60_cm_2D_QRFadj.tif")
@@ -22,8 +26,10 @@ cl100 <- rast("/mnt/disks/sped/ssc_sum/orig_preds/claytotal_r_1x_100_cm_2D_QRFad
 cl150 <- rast("/mnt/disks/sped/ssc_sum/orig_preds/claytotal_r_1x_150_cm_2D_QRFadj.tif")
 
 # Sand
+sandfiles <- list.files(path = "/mnt/disks/sped/ssc_sum/orig_preds",pattern="sandtotal",full.names = T, recursive = F)
+sandfiles <- sandfiles[grepl(".tif",sandfiles)]
 s0   <- rast("/mnt/disks/sped/ssc_sum/orig_preds/sandtotal_r_1x_0_cm_2D_QRFadj.tif")
-s5   <- rast("/mnt/disks/sped/ssc_sum/orig_preds/sandtotal_r_1x_5_cm_2D_QRFadj.tif")  
+s5   <- rast("/mnt/disks/sped/ssc_sum/orig_preds/sandtotal_r_1x_5_cm_2D_QRFadj.tif")
 s15  <- rast("/mnt/disks/sped/ssc_sum/orig_preds/sandtotal_r_1x_15_cm_2D_QRFadj.tif")
 s30  <- rast("/mnt/disks/sped/ssc_sum/orig_preds/sandtotal_r_1x_30_cm_2D_QRFadj.tif")
 s60  <- rast("/mnt/disks/sped/ssc_sum/orig_preds/sandtotal_r_1x_60_cm_2D_QRFadj.tif")
@@ -31,8 +37,10 @@ s100 <- rast("/mnt/disks/sped/ssc_sum/orig_preds/sandtotal_r_1x_100_cm_2D_QRFadj
 s150 <- rast("/mnt/disks/sped/ssc_sum/orig_preds/sandtotal_r_1x_150_cm_2D_QRFadj.tif")
 
 # Silt
+siltfiles <- list.files(path = "/mnt/disks/sped/ssc_sum/orig_preds",pattern="silttotal",full.names = T, recursive = F)
+siltfiles <- siltfiles[grepl(".tif",siltfiles)]
 si0   <- rast("/mnt/disks/sped/ssc_sum/orig_preds/silttotal_r_1x_0_cm_2D_QRFadj.tif")
-si5   <- rast("/mnt/disks/sped/ssc_sum/orig_preds/silttotal_r_1x_5_cm_2D_QRFadj.tif")  
+si5   <- rast("/mnt/disks/sped/ssc_sum/orig_preds/silttotal_r_1x_5_cm_2D_QRFadj.tif")
 si15  <- rast("/mnt/disks/sped/ssc_sum/orig_preds/silttotal_r_1x_15_cm_2D_QRFadj.tif")
 si30  <- rast("/mnt/disks/sped/ssc_sum/orig_preds/silttotal_r_1x_30_cm_2D_QRFadj.tif")
 si60  <- rast("/mnt/disks/sped/ssc_sum/orig_preds/silttotal_r_1x_60_cm_2D_QRFadj.tif")
@@ -81,8 +89,15 @@ writeRaster(sum150, "/mnt/disks/sped/ssc_sum/sum150.tif")
 
 Normalize predictions to 100% to fix problems
 ```{r}
-#terraOptions(memfrac=0.9, progress=2)
-divide_by_sum <- function(vector) {
+## List depths to use
+depths <- c("_0_cm","_5_cm","_15_cm","_30_cm","_60_cm","_100_cm","_150_cm")
+terraOptions(memfrac=0.15, progress=2)
+divide_by_sum <- function(depth) {
+  clay <- rast(clayfiles[grepl(depth,clayfiles)])
+  sand <- rast(sandfiles[grepl(depth,sandfiles)])
+  silt <- rast(siltfiles[grepl(depth,siltfiles)])
+  vector <- c(sand,silt,clay)
+  names(vector) <- c('sand', 'silt', 'clay')
   # no values sum to 0 (and few that sum to exactly 100), but this is how a check could be incorporated
   #if (sum(vector) == 0) {
     #stop("Sum of the vector is zero. Division by zero is not allowed.")
@@ -104,8 +119,6 @@ divide_by_sum <- function(vector) {
   ## Reference which fraction is max and min in stacks
   maxv2 <- which.max(v2)
   minv2 <- which.min(v2)
-  # maxv2 <- terra::app(v2, which.max)
-  # minv2 <- terra::app(v2, which.min)
   ## Create rasters for where clay values should be modified
   claymax <- maxv2
   claymax[claymax < 3] <- 0
@@ -132,22 +145,27 @@ divide_by_sum <- function(vector) {
   sandmin[sandmin > 1] <- 0
   sandmin <- sandmin * sumv2_99
   ## Modify the original rasters
-  v2[["clay"]] <- v2[["clay"]]+claymin
-  v2[["clay"]] <- v2[["clay"]]-claymax
-  v2[["silt"]] <- v2[["silt"]]+siltmin
-  v2[["silt"]] <- v2[["silt"]]-siltmax
-  v2[["sand"]] <- v2[["sand"]]+sandmin
-  v2[["sand"]] <- v2[["sand"]]-sandmax
-  return(v2)
+  gc()
+  clay <- v2[["clay"]]
+  clay <- clay + claymin
+  clay <- clay - claymax
+  silt <- v2[["silt"]]
+  silt <- silt + siltmin
+  silt <- silt - siltmax
+  gc()
+  sand <- v2[["sand"]]
+  sand <- sand + sandmin
+  sand <- sand - sandmax
+  v3 <- c(sand, silt, clay)
+  names(v3) <- c('sand', 'silt', 'clay')
+  writeRaster(v3, filename = paste0("/mnt/disks/sped/ssc_sum/sum",gsub("cm","",gsub("_","",depth)),"_fix.tif"), wopt=list(datatype='INT1U'))
 }
 
-app(ssc0, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum0_fix.tif",
-    overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc5, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum5_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc15, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum15_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc30, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum30_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc60, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum60_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc100, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum100_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-app(ssc150, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum150_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
+
+cl <- makeCluster(6, type="FORK")
+registerDoParallel(cl)
+parLapply(cl,depths,try(divide_by_sum))
+stopCluster(cl)
+
 
 ```
