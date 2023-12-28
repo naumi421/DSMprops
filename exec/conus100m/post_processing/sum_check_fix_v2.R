@@ -2,11 +2,15 @@
 
 
 # Install packages if not already installed
-required.packages <- c("raster","sp","snowfall", "snow")
+required.packages <- c("raster","sp", "doParallel")
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
 rm(required.packages, new.packages)
+
+## Folders
+oldfldr <- "/mnt/disks/sped/ssc_sum/orig_preds"
+newfldr <- "/mnt/disks/sped/ssc_sum"
 
 # Clay
 cl0   <- raster("/mnt/disks/sped/ssc_sum/orig_preds/claytotal_r_1x_0_cm_2D_QRFadj.tif")
@@ -72,15 +76,25 @@ names(ssc150) <- c('sand', 'silt', 'clay')
 sum150 <- sum(ssc150)
 writeRaster(sum150, "/mnt/disks/sped/ssc_sum/sum150.tif")
 
+## Files to include in function
+oldfiles <- list.files(path = oldfldr,pattern=".tif$",full.names = T, recursive = T)
+
+## Depths for list apply
+depths <- c("_0_cm","_5_cm","_15_cm","_30_cm","_60_cm","_100_cm","_150_cm")
+
 ## Function for normalizing fractions
-divide_by_sum <- function(a,b,c) {
+divide_by_sum <- function(d) {
+  a <- raster(paste0(oldfldr,"/sandtotal_r_1x",d,"_2D_QRFadj.tif"))
+  b <- raster(paste0(oldfldr,"/silttotal_r_1x",d,"_2D_QRFadj.tif"))
+  c <- raster(paste0(oldfldr,"/claytotal_r_1x",d,"_2D_QRFadj.tif"))
+  depthno <- as.numeric(unlist(strsplit(d, "_"))[2])
   # no values sum to 0 (and few that sum to exactly 100), but this is how a check could be incorporated
   #if (sum(vector) == 0) {
     #stop("Sum of the vector is zero. Division by zero is not allowed.")
   #}
   sand <- a / sum(a,b,c)*100
   silt <- b / sum(a,b,c)*100
-  sand <- c / sum(a,b,c)*100
+  clay <- c / sum(a,b,c)*100
   #v <- vector / sum(vector)*100
   sand <- round(sand,0)
   silt <- round(silt,0)
@@ -140,19 +154,27 @@ divide_by_sum <- function(a,b,c) {
   sand <- v2[["sand"]]
   sand <- sand + sandmin
   sand <- sand - sandmax
-  v3 <- c(sand, silt, clay)
+  v3 <- stack(sand, silt, clay)
   names(v3) <- c('sand', 'silt', 'clay')
-  return(v3)
+  writeRaster(v3, filename = paste0(newfldr,"/sum",depthno,"_fix.tif"), overwrite=TRUE,datatype = 'INT1U', options=c("COMPRESS=DEFLATE", "TFW=NO"))
+  #return(v3)
 }
 
+## Linux parallel list apply
+cpus <- min(length(depths),detectCores() - 2)
+cl <- makeCluster(cpus, type="FORK")
+registerDoParallel(cl)
+parLapply(cl,depths,try(divide_by_sum))
+stopCluster(cl)
+
 ## Set up to run function in parallel
-rasterOptions(maxmemory = 6.5e+09,chunksize = 5e+08, memfrac = 0.9)
-beginCluster(30,type='SOCK')
+# rasterOptions(maxmemory = 6.5e+09,chunksize = 5e+08, memfrac = 0.9)
+# beginCluster(30,type='SOCK')
 
 # clusterR(ssc0, overlay,filename= "/mnt/disks/sped/ssc_sum/sum0_fix.tif",
 #     overwrite=TRUE, args = list(fun = divide_by_sum),datatype = 'INT1U',progress="text")
 
-sum5_fix <- clusterR(ssc5, overlay, args = list(fun = divide_by_sum),progress="text")
+# sum5_fix <- clusterR(ssc5, overlay, args = list(fun = divide_by_sum),progress="text")
 #filename = "/mnt/disks/sped/ssc_sum/sum5_fix.tif", overwrite=TRUE,datatype = 'INT1U', options=c("COMPRESS=DEFLATE", "TFW=YES")
 
 # app(ssc5, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum5_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
