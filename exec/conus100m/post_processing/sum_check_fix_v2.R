@@ -8,6 +8,8 @@ if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
 rm(required.packages, new.packages)
 
+rasterOptions(maxmemory = 1e+09,chunksize = 1e+08, memfrac = 0.8)
+
 ## Folders
 oldfldr <- "/mnt/disks/sped/ssc_sum/orig_preds"
 newfldr <- "/mnt/disks/sped/ssc_sum"
@@ -88,18 +90,12 @@ divide_by_sum <- function(d) {
   b <- raster(paste0(oldfldr,"/silttotal_r_1x",d,"_2D_QRFadj.tif"))
   c <- raster(paste0(oldfldr,"/claytotal_r_1x",d,"_2D_QRFadj.tif"))
   depthno <- as.numeric(unlist(strsplit(d, "_"))[2])
-  # no values sum to 0 (and few that sum to exactly 100), but this is how a check could be incorporated
-  #if (sum(vector) == 0) {
-    #stop("Sum of the vector is zero. Division by zero is not allowed.")
-  #}
   sand <- a / sum(a,b,c)*100
   silt <- b / sum(a,b,c)*100
   clay <- c / sum(a,b,c)*100
-  #v <- vector / sum(vector)*100
   sand <- round(sand,0)
   silt <- round(silt,0)
   clay <- round(clay,0)
-  #v2 <- round(v, 0)
   v2 <- brick(sand,silt,clay)
   ## rounding creates occasional sums greater than 100
   ## Errant values are either 99 or 101, so we are correcting by subtracting 1 from
@@ -116,8 +112,6 @@ divide_by_sum <- function(d) {
   ## Reference which fraction is max and min in stacks
   maxv2 <- which.max(v2)
   minv2 <- which.min(v2)
-  # maxv2 <- terra::app(v2, which.max)
-  # minv2 <- terra::app(v2, which.min)
   ## Create rasters for where clay values should be modified
   claymax <- maxv2
   claymax[claymax < 3] <- 0
@@ -144,20 +138,16 @@ divide_by_sum <- function(d) {
   sandmin[sandmin > 1] <- 0
   sandmin <- sandmin * sumv2_99
   gc()
-  clay <- v2[["clay"]]
   clay <- clay + claymin
   clay <- clay - claymax
-  silt <- v2[["silt"]]
   silt <- silt + siltmin
   silt <- silt - siltmax
   gc()
-  sand <- v2[["sand"]]
   sand <- sand + sandmin
   sand <- sand - sandmax
   v3 <- stack(sand, silt, clay)
   names(v3) <- c('sand', 'silt', 'clay')
   writeRaster(v3, filename = paste0(newfldr,"/sum",depthno,"_fix.tif"), overwrite=TRUE,datatype = 'INT1U', options=c("COMPRESS=DEFLATE", "TFW=NO"))
-  #return(v3)
 }
 
 ## Linux parallel list apply
@@ -167,21 +157,3 @@ registerDoParallel(cl)
 parLapply(cl,depths,try(divide_by_sum))
 stopCluster(cl)
 
-## Set up to run function in parallel
-# rasterOptions(maxmemory = 6.5e+09,chunksize = 5e+08, memfrac = 0.9)
-# beginCluster(30,type='SOCK')
-
-# clusterR(ssc0, overlay,filename= "/mnt/disks/sped/ssc_sum/sum0_fix.tif",
-#     overwrite=TRUE, args = list(fun = divide_by_sum),datatype = 'INT1U',progress="text")
-
-# sum5_fix <- clusterR(ssc5, overlay, args = list(fun = divide_by_sum),progress="text")
-#filename = "/mnt/disks/sped/ssc_sum/sum5_fix.tif", overwrite=TRUE,datatype = 'INT1U', options=c("COMPRESS=DEFLATE", "TFW=YES")
-
-# app(ssc5, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum5_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-# app(ssc15, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum15_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-# app(ssc30, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum30_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-# app(ssc60, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum60_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-# app(ssc100, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum100_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-# app(ssc150, divide_by_sum, cores=120, filename= "/mnt/disks/sped/ssc_sum/sum150_fix.tif", overwrite=TRUE, wopt=list(datatype='INT1U', names = c('sand', 'silt', 'clay')))
-
-endCluster()
