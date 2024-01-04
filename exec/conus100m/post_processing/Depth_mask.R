@@ -20,7 +20,7 @@ lyrfiles <- lyrfiles[!grepl("lithic",lyrfiles)]
 lyrfiles <- lyrfiles[!grepl("resdept_",lyrfiles)]
 
 ## Final mask raster
-r_msk <- raster("/mnt/disks/sped/solus100preds/public_layers/anylithicdpt_cm_2D_p.tif")
+r_msk <- raster("/mnt/disks/sped/solus100preds/public_layers/anylithicdpt_cm_p.tif")
 
 
 ### Now process the rest of the files

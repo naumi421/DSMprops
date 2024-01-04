@@ -60,12 +60,12 @@ mskfn_d <- function(rast){
   ind[ind>201]<-201
   return(ind)
 }
-restrast <- raster("/mnt/covs/solus_preds/v2tst_gnat_pts/RestrDepth_gRPI_250k/resdept_r_1x_all_cm_2D_QRFadj.tif")
-lithrast <- raster("/mnt/covs/solus_preds/v2tst_gnat_pts/RestrDepth_gRPI_250k/anylithicdpt_1x_all_cm_2D_QRFadj.tif")
+restrast <- raster("/mnt/covs/solus_preds/v2tst_gnat_pts/RestrDepth_gRPI_250k/masked/resdept_r_1x_all_cm_2D_QRFadj.tif")
+lithrast <- raster("/mnt/covs/solus_preds/v2tst_gnat_pts/RestrDepth_gRPI_250k/masked/anylithicdpt_1x_all_cm_2D_QRFadj.tif")
 newrestrast <- calc(restrast,fun=mskfn_d,filename="/mnt/solus100/Predictionsv2/trimmed/RestrDepth_gRPI_250k/resdept_r_1x_all_cm_2D_QRFadj.tif",
-                    options=c("COMPRESS=DEFLATE", "TFW=YES"), datatype = dataType(restrast),progress = "text")
+                    options=c("COMPRESS=DEFLATE", "TFW=YES"), datatype = dataType(restrast),progress = "text", overwrite = T)
 newlithrast <- calc(lithrast,fun=mskfn_d,filename="/mnt/solus100/Predictionsv2/trimmed/RestrDepth_gRPI_250k/anylithicdpt_1x_all_cm_2D_QRFadj.tif",
-                    options=c("COMPRESS=DEFLATE", "TFW=YES"), datatype = dataType(lithrast),progress = "text")
+                    options=c("COMPRESS=DEFLATE", "TFW=YES"), datatype = dataType(lithrast),progress = "text", overwrite = T)
 
 ## Check for completed files (for rerunning after errors)
 compfiles <- list.files(path = newrastfldr,pattern="QRFadj",full.names = T, recursive = T)
