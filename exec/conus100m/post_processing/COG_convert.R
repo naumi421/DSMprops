@@ -1,7 +1,7 @@
 
 # Workspace setup
 # Install packages if not already installed
-required.packages <- c("raster", "doParallel","gdalraster") #"gdalUtilities"
+required.packages <- c("raster", "doParallel","gdalUtilities") #"gdalraster"
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
@@ -13,8 +13,8 @@ rasterOptions(maxmemory = 6.5e+09,chunksize = 5e+08, memfrac = 0.9)
 cpus <- min(124,detectCores() - 2)
 
 ## Folders
-infldr <- "/mnt/disks/sped/solus100preds/public_layers"
-outfldr <- "/mnt/disks/sped/solus100preds/public_layers_cog"
+infldr <- "/mnt/disks/sped/solus100preds/public_layers_depthmasked"
+outfldr <- "/mnt/disks/sped/solus100preds/public_layers_depthmasked_cog"
 
 ## Files and index
 infiles <- list.files(path = infldr,pattern=".tif*",full.names = T, recursive = T)
@@ -29,15 +29,15 @@ cog_fn <- function(r){
   if(dtype == "INT1U"){dtypegdal <- "Byte"}
   if(dtype == "INT2U"){dtypegdal <- "UInt16"}
   if(dtype == "FLT4S"){dtypegdal <- "Float32"}
-  args <- c("-ot", dtypegdal)
-  args <- c(args, "-of", "COG", "-co", "COMPRESSED=YES")
-  translate(fullpath, file.path(outfldr,flnm), args)
-  #gdal_translate(fullpath,file.path(outfldr,flnm),of="COG", ot = dtypegdal)
+  # args <- c("-ot", dtypegdal)
+  # args <- c(args, "-of", "COG", "-co", "COMPRESSED=YES")
+  # translate(fullpath, file.path(outfldr,flnm), args)
+  gdal_translate(fullpath,file.path(outfldr,flnm),of="COG", ot = dtypegdal)
 }
 
-dtlist <- c("INT1U")
-
-for(f in infiles){
-  dt <- dataType(raster(f))
-  dtlist <- append(dtlist,dt)
-}
+## Linux parallel list apply
+cpus <- min(length(rlist),detectCores() - 2)
+cl <- makeCluster(cpus, type="FORK")
+registerDoParallel(cl)
+parLapply(cl,rlist,try(cog_fn))
+stopCluster(cl)
