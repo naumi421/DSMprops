@@ -1,7 +1,7 @@
 
 # Workspace setup
 # Install packages if not already installed
-required.packages <- c("raster","rgdal", "rasterVis","maptools","RColorBrewer","ggplot2","gridExtra","classInt","RStoolbox","hexbin", "ranger", "parallel", "doParallel" ,"dplyr","Hmisc","viridisLite","DSMprops")
+required.packages <- c("raster", "doParallel" ,"dplyr","DSMprops")
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
