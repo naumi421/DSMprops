@@ -1,0 +1,11 @@
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+# DSMprops/exec/gNATSGO_maps
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+This folder houses folders to create gNATSGO maps for each soil property
+mapped in SOLUS. These maps are then used to create training locations
+to help build predictive models.

@@ -1,0 +1,36 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# DSMprops/exec/post_processing
+
+<!-- badges: start -->
+
+<!-- badges: end -->
+
+This folder houses scripts used to post process SOLUS prediction maps before public release
+
+**COG_convert.R:** Script to convert all final geotiff files into cloud optimized geotiffs.
+
+**Final_mask_name_notpublic.R:** Script used to mask out areas of the country where indigenous entities don't want data published as well ares slightly outside of US boundaries. This script also renames files to match agency standards.  
+
+**Final_mask_name.R** Script used to mask out areas of the country slightly outside of US boundaries. This script also renames files to match agency standards.
+
+**prediction_trimming.R:** Script that adjusts extreme values that fall outside of training data range. An after-the-fact linear adjustment was used on the random forest predictions to help ameliorate smoothing bias, but this creates small areas of values that fall outside of know property ranges that needed to be adjusted back to the max or min values.
+
+**sum_check_fix.R** Script that normalizes sand, silt and clay values to sum to 100% to maintain logical consistency.
+
+**Norm_Sum_Eval.R** Script that evaluates normalized sand, silt, and clay estimates. 
+
+**water_masking.R** Script to mask out areas of open water from predictions. 
