@@ -1,7 +1,7 @@
 
 # Workspace setup
 # Install packages if not already installed
-required.packages <- c("raster","rgdal", "rasterVis","maptools","RColorBrewer","ggplot2","gridExtra","classInt","RStoolbox","hexbin", "ranger", "parallel", "doParallel" ,"dplyr","Hmisc","viridisLite","DSMprops")
+required.packages <- c("raster","RColorBrewer","ggplot2","gridExtra","classInt", "doParallel" ,"dplyr","viridisLite","DSMprops")
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(required.packages, require, character.only=T)
@@ -13,13 +13,12 @@ rasterOptions(maxmemory = 5e+09, chunksize = 4e+08, memfrac = 0.9)
 cpus <- min(124,detectCores() - 2)
 
 ## Key Folder Locations
-topfolder <- "/mnt/covs/solus_preds/v2tst_gnat_pts"
-resultfolder <- "/mnt/covs/solus_preds/v2tst_gnat_pts/analysis"
+topfolder <- "/mnt/solus/SOLUSV2_models"
+resultfolder <- "/mnt/solus/SOLUSV2_models/analysis"
 
 ## Create lists of folders an files to cycle through
 topdirs <-  list.dirs(topfolder,recursive = F, full.names = T)
 topdirs
-#topdirs <- c("/mnt/covs/solus_preds/v2tst_gnat_pts/Rock_tot_gRPI_250k")
 ## Subsetting
 topdirs <- topdirs[grepl("_250k",topdirs)]
 topdirs <- topdirs[!grepl("first_test",topdirs)]
