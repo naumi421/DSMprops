@@ -13,8 +13,8 @@ rasterOptions(maxmemory = 6.5e+09,chunksize = 5e+08, memfrac = 0.9)
 cpus <- min(124,detectCores() - 2)
 
 ## Folders
-infldr <- "/mnt/disks/sped/solus100preds/notpublic_layers"
-outfldr <- "/mnt/disks/sped/solus100preds/notpublic_layers_cog"
+infldr <- "/mnt/disks/sped/solus100preds/soluspub_noncog"
+outfldr <- "/mnt/disks/sped/solus100preds/soluspub_cog"
 
 ## Files and index
 infiles <- list.files(path = infldr,pattern=".tif*",full.names = T, recursive = T)
