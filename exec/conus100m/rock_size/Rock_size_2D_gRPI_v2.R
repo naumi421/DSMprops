@@ -21,7 +21,7 @@ rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 cpus <- min(detectCores()-2, 124)
 
 ## Key Folder Locations
-predfolder <- "/mnt/disks/sped/solus100preds/v2tst_gnat_pts/Rock_tot_gRPI_250k"
+predfolder <- "/mnt/disks/sped/solus100preds/Rock_tot_gRPI_250k"
 repofolder <- "/mnt/disks/sped/repos/DSMprops"
 covfolder <- "/mnt/disks/sped/covs100m"
 propcovfldr <- "/mnt/disks/sped/covs100m_by_prop"
