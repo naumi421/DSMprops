@@ -21,7 +21,7 @@ rasterOptions(maxmemory = 1e+09, chunksize = 1e+08)
 cpus <- min(detectCores()-2, 124)
 
 ## Key Folder Locations
-predfolder <- "/mnt/disks/sped/solus100preds/Rock_tot_gRPI_250k"
+predfolder <- "/mnt/disks/sped/solus100preds/Boulders_gRPI_250k"
 repofolder <- "/mnt/disks/sped/repos/DSMprops"
 covfolder <- "/mnt/disks/sped/covs100m"
 propcovfldr <- "/mnt/disks/sped/covs100m_by_prop"
@@ -53,7 +53,7 @@ n.pts@data <- n.pts@data[,c("peiid","mtchtype","compname")]
 
 
 ### Define SSURGO property for modeling and covariate layer selection
-prop <- "fragvol_r" ## Dependent variable: UPDATE EVERY TIME
+prop <- "boulders" ## Dependent variable: UPDATE EVERY TIME
 
 
 ######### Grid Prep #################
@@ -104,11 +104,11 @@ pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp_covs.rds",sep=""))
 # pts.gNAT <- spsample(polybound[1,], 250000, type = 'random')
 # pts.gNAT <- SpatialPointsDataFrame(pts.gNAT, data.frame(row.names=row.names(pts.gNAT), ID=1:length(pts.gNAT)))
 # saveRDS(pts.gNAT, paste0(ptsfolder,"/CONUS_random_gNATsamp_250k.rds"))
-# pts.gNAT <- readRDS(paste0(ptsfolder,"/CONUS_random_gNATsamp_250k.rds"))
-# rasterOptions(maxmemory = 1.5e+10)
-# pts.gNAT <- DSMprops::parPTextr(sp = pts.gNAT, gridlist = gNATpts_cov.grids, os = "windows",nthreads = cpus)
+pts.gNAT <- readRDS(paste0(ptsfolder,"/CONUS_random_gNATsamp_250k.rds"))
+rasterOptions(maxmemory = 1.5e+10)
+pts.gNAT <- DSMprops::parPTextr(sp = pts.gNAT, gridlist = gNATpts_cov.grids, os = "windows",nthreads = cpus)
 ## Save points
-# saveRDS(pts.gNAT, paste(ptsfolder,"/CONUS_random_gNATsamp_250k_covs_",prop,"_",".rds",sep=""))
+saveRDS(pts.gNAT, paste(ptsfolder,"/CONUS_random_gNATsamp_250k_covs_",prop,"_",".rds",sep=""))
 pts.gNAT <- readRDS(paste(ptsfolder,"/CONUS_random_gNATsamp_250k_covs_",prop,"_",".rds",sep=""))
 
 ## Parallelized extract for nasis points: (larger datasets)
@@ -143,26 +143,27 @@ pts.ext.hor <- left_join(pts@horizons[pts@horizons$peiid %in% pts.ext$peiid,],pt
 # saveRDS(chfrags,paste0(predfolder,"/chfrags_conus.rds"))
 chfrags <- readRDS(paste0(predfolder,"/chfrags_conus.rds"))
 ## Sum together rock frag vols for all recorded rock sizes for each horizon
-frags_chkey <- plyr::ddply(chfrags,~chkey,summarise,fragvol_r = sum(fragvol_r))
-pts.ext.hor <- left_join(pts.ext.hor,frags_chkey,by="chkey")
-pts.ext.hor$fragvol_r <- ifelse(is.na(pts.ext.hor$fragvol_r), 0, pts.ext.hor$fragvol_r) # NAs set to zero as these are not recorded in chfrags table
+chfrags_bld <- chfrags[chfrags$fragsize_r > 599,]
+boulders_chkey <- plyr::ddply(chfrags_bld,~chkey,summarise,boulders = sum(fragvol_r))
+pts.ext.hor <- left_join(pts.ext.hor,boulders_chkey,by="chkey")
+pts.ext.hor$boulders <- ifelse(is.na(pts.ext.hor$boulders), 0, pts.ext.hor$boulders) # NAs set to zero as these are not recorded in chfrags table
 
 ##### Bring in original NASIS data to use those estimates as primary source of rock fragments
 ## NOTE: NOT USING SCD DATA FOR ROCK DUE TO LACK OF >3" DATA
 load(paste0(pedonfldr,"/nasis_pedons_20210325.RData")) # object named spc
-# nasis_ped_pts <- spc@site[spc@site$peiid %in% okpeiids,c("peiid","x_std","y_std")]
-# nasis_ped_pts <- subset(nasis_ped_pts,!is.na(nasis_ped_pts$x_std))
-# ## Create sp object
-# coordinates(nasis_ped_pts) <- ~ x_std + y_std
-# proj4string(nasis_ped_pts) <- CRS(SRS_string = "EPSG:4326")
-# nasis_ped_pts <- spTransform(nasis_ped_pts, cov.proj) # project to match rasters
-# nasis_ped_pts <- nasis_ped_pts[polybound,]
-# ## Extract covariates
-# ## Parallelized extract for nasis points: (larger datasets)
-# rasterOptions(maxmemory = 2e+09)
-# nas.pedpts.ext <- DSMprops::parPTextr(sp = nasis_ped_pts, gridlist = cov.grids, os = "linux",nthreads = 62)
-# ## Save points
-# saveRDS(nas.pedpts.ext, paste(predfolder,"/CONUS_nasis_pedpts_extracted_spatcovs.rds",sep=""))
+nasis_ped_pts <- spc@site[spc@site$peiid %in% okpeiids,c("peiid","x_std","y_std")]
+nasis_ped_pts <- subset(nasis_ped_pts,!is.na(nasis_ped_pts$x_std))
+## Create sp object
+coordinates(nasis_ped_pts) <- ~ x_std + y_std
+proj4string(nasis_ped_pts) <- CRS(SRS_string = "EPSG:4326")
+nasis_ped_pts <- spTransform(nasis_ped_pts, cov.proj) # project to match rasters
+nasis_ped_pts <- nasis_ped_pts[polybound,]
+## Extract covariates
+## Parallelized extract for nasis points: (larger datasets)
+rasterOptions(maxmemory = 2e+09)
+nas.pedpts.ext <- DSMprops::parPTextr(sp = nasis_ped_pts, gridlist = cov.grids, os = "linux",nthreads = cpus)
+## Save points
+saveRDS(nas.pedpts.ext, paste(predfolder,"/CONUS_nasis_pedpts_extracted_spatcovs.rds",sep=""))
 ## Updated extract for CONUS
 nas.pedpts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_pedpts_extracted_spatcovs.rds",sep=""))
 ## Now attach geo weights
@@ -204,8 +205,8 @@ scd.pts.ext.hor$hzn_bot_locid <- paste(scd.pts.ext.hor$hzdepb,scd.pts.ext.hor$lo
 scd.pts.ext.hor <- scd.pts.ext.hor[!duplicated(scd.pts.ext.hor$hzn_bot_locid),]
 
 ## SCD prep for RF
-scd.pts.ext.hor$prop <- scd.pts.ext.hor$total_frags_pct_nopf  ## UPDATE everytime!
-scdprop <- "total_frags_pct_nopf"
+scd.pts.ext.hor$prop <- scd.pts.ext.hor[,c(prop)]  ## UPDATE everytime!
+scdprop <- prop
 scd.pts.ext.hor$tid <- "scd"
 hist(scd.pts.ext.hor$prop)
 summary(scd.pts.ext.hor$prop)
