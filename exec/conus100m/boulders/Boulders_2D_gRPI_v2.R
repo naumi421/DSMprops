@@ -104,11 +104,11 @@ pts.gRPI <- readRDS(paste(ptsfolder,"/CONUS_random_gRPIsamp_covs.rds",sep=""))
 # pts.gNAT <- spsample(polybound[1,], 250000, type = 'random')
 # pts.gNAT <- SpatialPointsDataFrame(pts.gNAT, data.frame(row.names=row.names(pts.gNAT), ID=1:length(pts.gNAT)))
 # saveRDS(pts.gNAT, paste0(ptsfolder,"/CONUS_random_gNATsamp_250k.rds"))
-pts.gNAT <- readRDS(paste0(ptsfolder,"/CONUS_random_gNATsamp_250k.rds"))
-rasterOptions(maxmemory = 1.5e+10)
-pts.gNAT <- DSMprops::parPTextr(sp = pts.gNAT, gridlist = gNATpts_cov.grids, os = "windows",nthreads = cpus)
+# pts.gNAT <- readRDS(paste0(ptsfolder,"/CONUS_random_gNATsamp_250k.rds"))
+# rasterOptions(maxmemory = 1.5e+10)
+# pts.gNAT <- DSMprops::parPTextr(sp = pts.gNAT, gridlist = gNATpts_cov.grids, os = "windows",nthreads = cpus)
 ## Save points
-saveRDS(pts.gNAT, paste(ptsfolder,"/CONUS_random_gNATsamp_250k_covs_",prop,"_",".rds",sep=""))
+# saveRDS(pts.gNAT, paste(ptsfolder,"/CONUS_random_gNATsamp_250k_covs_",prop,"_",".rds",sep=""))
 pts.gNAT <- readRDS(paste(ptsfolder,"/CONUS_random_gNATsamp_250k_covs_",prop,"_",".rds",sep=""))
 
 ## Parallelized extract for nasis points: (larger datasets)
@@ -160,10 +160,10 @@ nasis_ped_pts <- spTransform(nasis_ped_pts, cov.proj) # project to match rasters
 nasis_ped_pts <- nasis_ped_pts[polybound,]
 ## Extract covariates
 ## Parallelized extract for nasis points: (larger datasets)
-rasterOptions(maxmemory = 2e+09)
-nas.pedpts.ext <- DSMprops::parPTextr(sp = nasis_ped_pts, gridlist = cov.grids, os = "linux",nthreads = cpus)
-## Save points
-saveRDS(nas.pedpts.ext, paste(predfolder,"/CONUS_nasis_pedpts_extracted_spatcovs.rds",sep=""))
+# rasterOptions(maxmemory = 2e+09)
+# nas.pedpts.ext <- DSMprops::parPTextr(sp = nasis_ped_pts, gridlist = cov.grids, os = "linux",nthreads = cpus)
+# ## Save points
+# saveRDS(nas.pedpts.ext, paste(predfolder,"/CONUS_nasis_pedpts_extracted_spatcovs.rds",sep=""))
 ## Updated extract for CONUS
 nas.pedpts.ext <- readRDS(paste(predfolder,"/CONUS_nasis_pedpts_extracted_spatcovs.rds",sep=""))
 ## Now attach geo weights
@@ -328,6 +328,8 @@ for(d in depths){
   data_grid_df$rank_final <- rank(data_grid_df$rank_ave,ties.method = "random")
   ## Determine lowest gRPI for spatial cross validation matching later
   gRPI_best <- data_grid_df[data_grid_df$rank_final==min(data_grid_df$rank_final),]$gRPIfinal
+  data_grid_df[data_grid_df$rank_final == 1,c("rank_final")] <- 1.5
+  data_grid_df[data_grid_df$datagrid == 'geo_gps_gps2_gps3_srce_scd_direct_home',c("rank_final")] <- 1 ## Issues with gRPI lead to subjective selection
   ## Save RPI table
   write.table(data_grid_df, paste(predfolder,"/gRPIs_", prop,"_", d, "_cm.txt",sep=""), sep = "\t", row.names = FALSE)
   # data_grid_df <- read.delim(paste(predfolder,"/gRPIs_", prop,"_", d, "_cm.txt",sep=""),stringsAsFactors = F)
@@ -361,7 +363,7 @@ for(d in depths){
 
   ## Combine CV tables and save in list as R object
   cv.lst <- list(cv10f,s1cv10f,s10cv10f,s50cv10f, s100cv10f)
-  # saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep="")) # takes forever...
+  saveRDS(cv.lst,paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep="")) # takes forever...
   # #cv.lst <- readRDS(paste(predfolder,"/CVlist_", prop, '_',d, "_cm.rds",sep=""))
 
   ## Validation metrics for CVs at different spatial supports
@@ -408,7 +410,7 @@ for(d in depths){
     theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
     xlab("Measured") + ylab("Spat. CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
     ggtitle(paste(bestval,"Spat. Cross val", prop, d, "cm",sep=" "))
-  #gplt.dcm.2D.CV
+  #gplt.dcm.2D.sCV
   ggsave(paste(predfolder,'/sValPlot_1to1_all_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.sCV, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
   ## Now just SCD pedons
   gplt.dcm.2D.sCV.SCD <- ggplot(data=bestvalpts[bestvalpts$mtchtype=="scd",], aes(prop_t, pcvpred)) +
@@ -416,7 +418,7 @@ for(d in depths){
     theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
     xlab("SCD Measured") + ylab("Spat. CV Prediction") + scale_fill_gradientn(name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
     ggtitle(paste(bestval,"Spat. Cross val", prop, d, "cm",sep=" "))
-  #gplt.dcm.2D.CV.SCD
+  #gplt.dcm.2D.sCV.SCD
   ggsave(paste(predfolder,'/sValPlot_1to1_scd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.sCV.SCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
   ## Now just with SCD pedons with GPS or after 2010
   gplt.dcm.2D.sCV.gSCD <- ggplot(data=bestvalpts[bestvalpts$mtchtype=="scd"&(bestvalpts$geo_cls=="gps"|bestvalpts$geo_cls=="gps2"|bestvalpts$geo_cls=="gps3"),], aes(prop_t, pcvpred)) +
@@ -424,7 +426,7 @@ for(d in depths){
     theme(axis.text=element_text(size=8), legend.text=element_text(size=10), axis.title=element_text(size=10),plot.title = element_text(size=10,hjust=0.5)) +
     xlab("gps SCD Measured") + ylab("Spat. CV Prediction") + scale_fill_gradientn( name = "Count", trans = "log", colours = rev(viri),labels=scaleFUN) +
     ggtitle(paste(bestval,"Spat. Cross val", prop, d, "cm",sep=" "))
-  #gplt.dcm.2D.CV.gSCD
+  #gplt.dcm.2D.sCV.gSCD
   ggsave(paste(predfolder,'/sValPlot_1to1_gscd_',prop,'_',d,'_cm.tif',sep=""), plot = gplt.dcm.2D.sCV.gSCD, device = "tiff", dpi = 600, limitsize = TRUE, width = 6, height = 5, units = 'in',compression = c("lzw"))
 
   ###### Cross validation plots
